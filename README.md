@@ -1,4 +1,6 @@
 # Gen1Recomp
+> **Looking for Gen1Recomp VR Unplugged on Meta Quest?** Visit the [Quest project](https://github.com/HimioneGranger/Gen1recomp-Quest-Standalone) or the [VR Unplugged site](https://himionegranger.github.io/gen1recomp-unplugged/).
+
 
 A native LÖVE2D recreation of Poke Red, Blue and Yellow. The engine and map
 behavior are hand-written Lua; game data and graphics are decoded from a ROM
