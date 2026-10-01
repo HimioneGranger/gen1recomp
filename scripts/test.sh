@@ -156,6 +156,7 @@ else
   echo "   luarocks install luacheck; CI installs and gates on it regardless)"
 fi
 
+run_tier "T0 Android importer copy lifecycle" python3 tests/android_importer_copy_test.py
 run_tier "T0 ROM builder version routing" python3 tests/build_rom_data_cli_test.py
 run_tier "T0 ROM manifest generator pin/overrides" python3 tests/rom_manifest_generator_test.py
 run_tier "T0 Yellow title OBP eye remap" python3 tests/title_pikachu_obp_test.py
@@ -175,6 +176,7 @@ run_tier "T1/T2 engine invariants + parity gates" "$LUA" tests/run_engine.lua
 # Gen 2 / Crystal: ROM-free (own fixtures, or a self-skip on a missing cache),
 # so it runs here rather than behind the Red content gate below.
 run_tier "T2 Gen 2 / Crystal suites" "$LUA" tests/run_gen2.lua
+run_tier "T2 Gen 5 importer + provider suites" "$LUA" tests/run_gen5.lua
 run_tier "T4 mod-SDK" "$LUA" tests/run_modkit.lua
 run_tier "T4 modkit dev tooling (fixture)" "$LUA" tests/modkit_tests.lua
 
