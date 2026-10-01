@@ -6,9 +6,11 @@ local Graphics=require("src.import.gen5.Graphics")
 local Cells=require("src.import.gen5.Cells")
 local Animation=require("src.import.gen5.Animation")
 local Composer=require("src.import.gen5.Composer")
+local Parts=require("src.import.gen5.Parts")
+local LuaWriter=require("src.import.LuaWriter")
 local Importers=require("src.import.Importers")
 local StreamMD5=require("src.mods.StreamMD5")
-local Bw={IMPORTER="gen5_bw",EXPORT_VERSION="1.0.1",COUNT=649,MAX_TICKS=240}
+local Bw={IMPORTER="gen5_bw",EXPORT_VERSION="1.1.0",COUNT=649,MAX_TICKS=240}
 
 function Bw.open(rom)
   local nds=Nds.open(rom)
@@ -120,13 +122,31 @@ function Bw.image(poses,palette)
     tickRate=60,durations=poses.durations,loopStartFrame=poses.loopStartFrame,
     cycleTicks=poses.ticks,cycleCapped=poses.cycleCapped,anchorX=-poses.min_x,anchorY=-poses.min_y}
 end
+-- Complete long animations without a global loop: see Parts.lua.
+-- Both return nil and a reason when a part-track bound is exceeded; the
+-- variant then keeps its capped atlas and native fallback.
+function Bw.parts(sprite,progress)
+  local model,why=Parts.build(sprite,progress)
+  if not model then return nil,why end
+  return Parts.layout(model)
+end
+function Bw.partsAssets(model,sprite,checkpoint)
+  local image=Parts.image(model,checkpoint)
+  local ok,encoded=pcall(image.encode,image,"png");image:release();assert(ok,encoded)
+  local bytes=encoded:getString();if encoded.release then encoded:release() end
+  local meta=LuaWriter.encode(Parts.metadata(model,sprite))
+  if #bytes>Importers.MAX_ENTRY_BYTES or #meta>Importers.MAX_ENTRY_BYTES then
+    return nil,"part tracks exceed the pack entry limit"
+  end
+  return bytes,meta,Parts.stub(model)
+end
 function Bw.job(rom,fs,options)
   options=options or {}
   return coroutine.create(function()
     local source,archive=Bw.identify(rom);assert(source,archive)
     local species=options.species or {}
     if not options.species then for dex=1,Bw.COUNT do species[#species+1]=dex end end
-    local entries,capped={},0
+    local entries,capped,parts,partsSkipped={},0,0,{}
     local total=#species*8
     local completed=0
     for _,dex in ipairs(species) do
@@ -148,6 +168,36 @@ function Bw.job(rom,fs,options)
               if clock then sliceStart=clock() end
             end
           end)
+          -- The capped atlas stays as before for 1.0.x consumers. Its complete
+          -- animation is published separately as independent part tracks.
+          local partsId
+          if poses and poses.cycleCapped then
+            local id=("parts/%03d/%s%s"):format(dex,side,female and "/female" or "")
+            sliceStart=clock and clock() or 0
+            -- Renders yield every eight states; other checkpoints (done=nil)
+            -- yield on the 4 ms soft limit only.
+            local function pace(done,count)
+              if (done and (done%8==0 or done==count)) or (clock and clock()-sliceStart>=0.004) then
+                coroutine.yield({done=completed+0.5,total=total,
+                  status=("Assembling %03d %s parts"):format(dex,side)})
+                if clock then sliceStart=clock() end
+              end
+            end
+            local model,why=Bw.parts(sprite,pace)
+            local png,meta,stub
+            if model then png,meta,stub=Bw.partsAssets(model,sprite,pace);why=png==nil and meta or why end
+            if png then
+              local base=source.md5.."/"..Bw.EXPORT_VERSION.."/"..id
+              local size,err=Importers.writeAsset(Bw.IMPORTER,"battle_sprites",base..".png",png,fs);assert(size,err)
+              local metaSize,metaErr=Importers.writeAsset(Bw.IMPORTER,"battle_sprites",base..".lua",meta,fs)
+              assert(metaSize,metaErr)
+              entries[id]={file=base..".png",size=size,width=stub.width,height=stub.height*stub.frames,
+                frames=stub.frames,sprite=stub,metadata={file=base..".lua",size=metaSize}}
+              partsId,parts=id,parts+1
+            else partsSkipped[#partsSkipped+1]=id..": "..tostring(why) end
+            -- Keep part publication and the atlas encodes in separate slices.
+            coroutine.yield({done=completed+0.5,total=total,status=("Published %03d %s parts"):format(dex,side)})
+          end
           for _,palette in ipairs({"normal","shiny"}) do
             local id=("%s/%03d/%s%s"):format(palette,dex,side,female and "/female" or "")
             if genderFallback then
@@ -158,6 +208,7 @@ function Bw.job(rom,fs,options)
               if alias.sprite.cycleCapped then capped=capped+1 end
             else
               local image,metadata=Bw.image(poses,sprite[palette])
+              if partsId then metadata.partsEntry,metadata.partsPalette=partsId,palette end
               local width,height=image:getDimensions()
               local ok,encoded=pcall(image.encode,image,"png");image:release();assert(ok,encoded)
               local bytes=encoded:getString();if encoded.release then encoded:release() end
@@ -177,7 +228,8 @@ function Bw.job(rom,fs,options)
     local ok,err=Importers.writePack(Bw.IMPORTER,"battle_sprites",{
       format=1,importer=Bw.IMPORTER,pack="battle_sprites",kind="sprite",version=Bw.EXPORT_VERSION,
       source=source,entries=entries},fs);assert(ok,err)
-    return {source=source,packs={battle_sprites=completed},skipped={},cappedCycles=capped}
+    return {source=source,packs={battle_sprites=completed},skipped={},cappedCycles=capped,partTracks=parts,
+      partTracksSkipped=partsSkipped}
   end)
 end
 return Bw
