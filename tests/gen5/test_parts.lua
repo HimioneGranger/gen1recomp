@@ -222,6 +222,15 @@ local long={graphics=flat,cells=same,nmcr=s5.nmcr,map=0,normal=palette(0),shiny=
   nanr={animations={{loop_start=0,playback_type=1,frames={{cell_id=0,duration=70000},{cell_id=0,duration=1}}}}}}
 local none,why=Parts.build(long)
 T.check(none==nil and tostring(why):find("tick bounds",1,true)~=nil,"over-long track returns a reason instead of failing")
+-- A frame past the old 240-tick window that the compositor cannot render
+-- (canvas over 1024 pixels) skips part tracks instead of throwing.
+local huge={cells={{oams={oam(0,0,8,8,5,1)}},{oams={oam(0,0,64,64,5,1)}}}}
+local hs={graphics=flat,cells=huge,nmcr=s5.nmcr,map=0,normal=palette(0),shiny=palette(0),
+  nanr={animations={{loop_start=0,playback_type=2,frames={{cell_id=0,duration=300},
+    {cell_id=1,duration=1,scale_x=65536,scale_y=65536}}}}}}
+local okCall,hm,hwhy=pcall(Parts.build,hs)
+T.check(okCall and hm==nil and tostring(hwhy):find("cannot be composed",1,true)~=nil,
+  "uncomposable late frame returns a reason instead of aborting the import")
 -- Checkpoints: progress() without arguments is offered outside renders too.
 local calls,bare=0,0
 Parts.build(sprite,function(done) calls=calls+1;if done==nil then bare=bare+1 end end)
