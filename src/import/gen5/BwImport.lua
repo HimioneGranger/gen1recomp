@@ -8,7 +8,7 @@ local Animation=require("src.import.gen5.Animation")
 local Composer=require("src.import.gen5.Composer")
 local Importers=require("src.import.Importers")
 local StreamMD5=require("src.mods.StreamMD5")
-local Bw={IMPORTER="gen5_bw",EXPORT_VERSION="1.0.0",COUNT=649,MAX_TICKS=240}
+local Bw={IMPORTER="gen5_bw",EXPORT_VERSION="1.0.1",COUNT=649,MAX_TICKS=240}
 
 function Bw.open(rom)
   local nds=Nds.open(rom)
@@ -32,13 +32,15 @@ function Bw.readPokemon(archive,dex,side,female)
   assert(side=="front" or side=="back","invalid sprite side")
   local base=dex*20
   local graphicsOffset=side=="front" and 2 or 11
+  local genderFallback=false
   if female then
     local candidate=archive.member(base+graphicsOffset+1)
-    if #candidate>0 then graphicsOffset=graphicsOffset+1 end
+    genderFallback=#candidate==0
+    if not genderFallback then graphicsOffset=graphicsOffset+1 end
   end
   local function member(offset) return Lz.decode(archive.member(base+offset)) end
   local first=side=="front" and 4 or 13
-  local sprite={graphics=Graphics.parseGraphics(member(graphicsOffset)),
+  local sprite={genderFallback=genderFallback,graphics=Graphics.parseGraphics(member(graphicsOffset)),
     cells=Cells.parse(member(first)),nanr=assert(Animation.nanr(member(first+1))),
     nmcr=assert(Animation.nmcr(member(first+2))),nmar=assert(Animation.nmar(member(first+3))),
     normal=Graphics.parsePalette(member(18)),shiny=Graphics.parsePalette(member(19))}
@@ -130,30 +132,42 @@ function Bw.job(rom,fs,options)
     for _,dex in ipairs(species) do
       for _,side in ipairs({"front","back"}) do
         for _,female in ipairs({false,true}) do
-          local sprite=Bw.readPokemon(archive,dex,side,female)
+          -- An empty female graphics member uses exactly the male graphics,
+          -- cells, animation and palettes. Preserve its logical IDs while
+          -- reusing the already published male atlas instead of rebuilding it.
+          local genderFallback=female and #archive.member(dex*20+(side=="front" and 3 or 12))==0
+          local sprite=not genderFallback and Bw.readPokemon(archive,dex,side,female) or nil
           local clock=love and love.timer and love.timer.getTime
           local sliceStart=clock and clock() or 0
-          local poses=Bw.poses(sprite,function(done,count)
+          local poses=not genderFallback and Bw.poses(sprite,function(done,count)
             -- Avoid one launcher frame per source tick. Keep each slice at
             -- most eight ticks, with a 4 ms soft limit between compositions.
             if done%8==0 or done==count or (clock and clock()-sliceStart>=0.004) then
-              coroutine.yield({done=completed+done/count*2,total=total,
+              coroutine.yield({done=completed+done/count*0.5,total=total,
                 status=("Assembling %03d %s"):format(dex,side)})
               if clock then sliceStart=clock() end
             end
           end)
           for _,palette in ipairs({"normal","shiny"}) do
-            local image,metadata=Bw.image(poses,sprite[palette])
-            local width,height=image:getDimensions()
-            local ok,encoded=pcall(image.encode,image,"png");image:release();assert(ok,encoded)
-            local bytes=encoded:getString();if encoded.release then encoded:release() end
             local id=("%s/%03d/%s%s"):format(palette,dex,side,female and "/female" or "")
-            -- Content paths include source+export version. An interrupted new
-            -- import cannot overwrite another source/version's published pack.
-            local file=source.md5.."/"..Bw.EXPORT_VERSION.."/"..id..".png"
-            local size,err=Importers.writeAsset(Bw.IMPORTER,"battle_sprites",file,bytes,fs);assert(size,err)
-            entries[id]={file=file,size=size,width=width,height=height,frames=#poses.frames,sprite=metadata}
-            if poses.cycleCapped then capped=capped+1 end
+            if genderFallback then
+              local male=assert(entries[("%s/%03d/%s"):format(palette,dex,side)],"missing male atlas")
+              local alias={}
+              for key,value in pairs(male) do alias[key]=value end
+              entries[id]=alias
+              if alias.sprite.cycleCapped then capped=capped+1 end
+            else
+              local image,metadata=Bw.image(poses,sprite[palette])
+              local width,height=image:getDimensions()
+              local ok,encoded=pcall(image.encode,image,"png");image:release();assert(ok,encoded)
+              local bytes=encoded:getString();if encoded.release then encoded:release() end
+              -- Content paths include source+export version. An interrupted new
+              -- import cannot overwrite another source/version's published pack.
+              local file=source.md5.."/"..Bw.EXPORT_VERSION.."/"..id..".png"
+              local size,err=Importers.writeAsset(Bw.IMPORTER,"battle_sprites",file,bytes,fs);assert(size,err)
+              entries[id]={file=file,size=size,width=width,height=height,frames=#poses.frames,sprite=metadata}
+              if poses.cycleCapped then capped=capped+1 end
+            end
             completed=completed+1
             coroutine.yield({done=completed,total=total,status="Imported "..id})
           end

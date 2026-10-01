@@ -11,15 +11,18 @@ This extends the existing asset-transform/pack direction referenced as D11 in
 ## Exact delta
 
 Register beta importer `gen5_bw`, internal module
-`src.import.gen5.BwImport`, source `.nds`, pack `battle_sprites`, version 1.0.0.
+`src.import.gen5.BwImport`, source `.nds`, pack `battle_sprites`, version 1.0.1.
 The launcher dispatches the registered trusted module instead of a hardcoded
 two-importer map. Existing `pmd_red` and `lttp` descriptors name their existing
-modules. The new importer resumes once per launcher update for bounded progress.
+modules. Gen 5 work batches up to 24 resumes within a soft 6 ms launcher budget.
+PMD's single resume and Zelda's existing 24-resume pacing remain unchanged.
 Android `picked_importer_<id>.bin` sources use the existing background streaming
 copy helper and become visible to Lua after `.part` publication. Their completion
 signal remains the final basename; required-mod markers retain their separate
 path. Assembly slices yield after at most eight ticks or a soft 4 ms limit
 between compositions.
+Empty female graphics variants alias the already assembled male atlas while
+retaining their logical entry IDs; genuine female artwork remains distinct.
 No public manifest field, registry, hook, event, schema or permission is added.
 The complete pack IDs and timing contract are documented in
 `docs/gen5-battle-sprite-importer.md`.

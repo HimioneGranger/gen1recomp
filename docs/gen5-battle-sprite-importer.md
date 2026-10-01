@@ -14,6 +14,9 @@ not yet been verified. Black 2 / White 2 and trimmed dumps are unsupported.
 
 The pack exports national dex 1–649 base forms, front/back, normal/shiny and
 female variants. Missing female graphics use the source's male/unisex graphics.
+Exporter 1.0.1 reuses the same atlas file for those identical gender variants,
+keeping all entry IDs available. On tested Black this removes 2,212 duplicate
+PNG encodes/writes out of 5,192 while preserving the artwork and timing.
 Alternate forms, portraits, overworld sprites, audio and battle renderer changes
 are outside this importer. NMAR selects the idle multicell map; the separate
 wait/break sequences are not combined with that idle animation.
@@ -54,7 +57,8 @@ gameplay or rendering effect with no consumer installed.
 
 Android transfers run on a background worker and publish the final picker filename
 only after a complete copy. Assembly slices yield after at most eight ticks or
-a soft 4 ms limit between compositions; a failure stops the job. Assets use source MD5
+a soft 4 ms limit between compositions. The launcher batches these slices within
+a soft 6 ms budget, with at most 24 resumes per update; a failure stops the job. Assets use source MD5
 and exporter version paths, and `pack.lua` is written after all entries. A failed
 first import has no published pack. A reimport of the same source/version uses
 the same paths; this is not a transactional filesystem replacement.
