@@ -39,17 +39,64 @@ def main():
     assert 'if (directRequired) {' in worker
     assert 'writeFlagFile(pickedRoot, PICK_ERROR_FILENAME, destName)' in worker
     assert 'getCanonicalFile()' in src and '!destFile.getPath().startsWith(rootPrefix)' in src
+    picker = method(src, 'public static boolean showFilePicker(String destFilename, String saveDir)')
+    assert picker.index('pickerTransfer.beginPicker()') < picker.index('self.pendingPickSaveDir =')
+    assert 'if (!opened) pickerTransfer.finish();' in picker
+    assert 'if (!pickerTransfer.claimResult())' in src
+    assert 'if (!handedOff) pickerTransfer.finish();' in src
+    assert 'STATE_PENDING_PICK_ACTIVE, pickerTransfer.isPicking()' in src
+    assert 'pickerTransfer.restorePicker();' in src
+    assert 'finally {' in worker and 'pickerTransfer.finish();' in worker
+    result_source = src[src.index('if (requestCode != FILE_PICKER_REQUEST_CODE)'):]
+    cancelled = method(result_source, 'if (uri == null)')
+    assert 'PICK_CANCELLED_PREFIX + destName' in cancelled and 'isTelevision' not in cancelled
     helpers = '\n'.join(method(src, anchor) for anchor in (
         'private static boolean isImporterDestination',
+        'private static final class PickerTransferGate',
         'private static final class PickCopyResult',
         'private static String hex(',
+        'private static void writeFlagFile(',
         'private static PickCopyResult copyRequiredImport(',
     ))
+    # Compile the actual asynchronous production branch, not a test rewrite of
+    # its copy/publish/finally sequence. Android URI routing stays source-gated.
+    helpers += '\nstatic final PickerTransferGate pickerTransfer = new PickerTransferGate();\n'
+    helpers += 'static final String PICK_ERROR_FILENAME="pick_error.flag", PICK_COMPLETE_FILENAME="pick_complete.flag";\n'
+    helpers += '''static void startProductionCopy(final InputStream pickedSource,
+        final File destFile, final File pickedRoot, final String destName,
+        final boolean directRequired) {\n'''
+    helpers += method(src, 'if (directRequired || isImporterDestination(destName))')
+    # The production branch hands ownership to the Activity result handler.
+    helpers = helpers.replace('final boolean directRequired) {\nif',
+        'final boolean directRequired) {\nboolean handedOff=false;\nif')
+    helpers += '\n}\n'
+    helpers += 'static File cancelRoot;\nstatic final String PICK_CANCELLED_PREFIX="cancelled:";\n'
+    helpers += 'static void writeSaveDirFlag(String name,String body) { writeFlagFile(cancelRoot,name,body); }\n'
+    helpers += 'static void productionCancel(String destName) { Object uri=null; try {\n'+cancelled+'\n} finally { pickerTransfer.finish(); } }\n'
     fixture = r'''
     static void check(boolean value, String label) {
         if (!value) throw new AssertionError(label);
     }
     static class Log { static void d(String tag, String message) {} }
+    static void awaitReleased(String label) throws Exception {
+        long until=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while(!pickerTransfer.beginPicker()) {
+            if(System.nanoTime()>=until) throw new AssertionError(label+" did not release gate");
+            Thread.yield();
+        }
+        pickerTransfer.finish();
+    }
+    static class PausedInput extends ByteArrayInputStream {
+        final java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch proceed=new java.util.concurrent.CountDownLatch(1);
+        PausedInput(byte[] bytes) { super(bytes); }
+        public synchronized int read(byte[] b,int off,int len) {
+            entered.countDown();
+            try { check(proceed.await(5,java.util.concurrent.TimeUnit.SECONDS),"paused source released"); }
+            catch(InterruptedException e) { throw new AssertionError(e); }
+            return super.read(b,off,len);
+        }
+    }
     static class CheckedInput extends InputStream {
         final byte[] data; final File target; int cursor; boolean closed;
         CheckedInput(byte[] data, File target) { this.data=data; this.target=target; }
@@ -96,7 +143,53 @@ def main():
         new FileOutputStream(new File(blocked,"prevent-delete")).close();
         check(!copyRequiredImport(new ByteArrayInputStream(data),blocked).ok,"publish failure reported");
         check(blocked.isDirectory() && !new File(blocked+".part").exists(),"publication failure cleanup");
-        System.out.println("PASS Android importer copy: allowlist, async routing, atomic publication, exact bytes/MD5, read/publish failure cleanup");
+        // Force the old race window: worker A owns the shared .part while B
+        // requests the exact same importer destination or submits a duplicate result.
+        File racing=new File(root,"picked_importer_race.bin");
+        PausedInput paused=new PausedInput(data);
+        check(pickerTransfer.beginPicker(),"first picker accepted");
+        check(!pickerTransfer.beginPicker(),"second picker cannot replace pending metadata");
+        check(pickerTransfer.claimResult(),"first result claimed");
+        startProductionCopy(paused,racing,root,racing.getName(),true);
+        check(paused.entered.await(5,java.util.concurrent.TimeUnit.SECONDS),"actual worker entered stream read");
+        check(new File(racing+".part").exists(),"worker owns shared partial");
+        check(!pickerTransfer.beginPicker(),"same importer blocked during actual transfer");
+        check(!pickerTransfer.claimResult(),"duplicate result cannot launch a second worker");
+        pickerTransfer.restorePicker();
+        check(!pickerTransfer.beginPicker(),"activity restoration cannot unlock active worker");
+        paused.proceed.countDown(); awaitReleased("successful worker");
+        pickerTransfer.restorePicker();
+        check(pickerTransfer.beginPicker(),"old PICKING bundle cannot re-arm after actual async completion");pickerTransfer.finish();
+        check(java.util.Arrays.equals(data,java.nio.file.Files.readAllBytes(racing.toPath())),"raced destination is complete and unchanged");
+        check(!new File(racing+".part").exists(),"race leaves no partial");
+        String marker=new String(java.nio.file.Files.readAllBytes(new File(root,PICK_COMPLETE_FILENAME).toPath()),"UTF-8");
+        check(marker.contains(racing.getName()) && marker.contains(hex(MessageDigest.getInstance("MD5").digest(data))),"gate retained through completion marker");
+        check(pickerTransfer.beginPicker() && pickerTransfer.claimResult(),"new picker accepted after completion");
+        startProductionCopy(new InputStream(){public int read() throws IOException {throw new IOException("worker failure");}},racing,root,racing.getName(),false);
+        awaitReleased("failed worker");
+        check(java.util.Arrays.equals(data,java.nio.file.Files.readAllBytes(racing.toPath())),"failed replacement preserves final");
+        check(new File(root,PICK_ERROR_FILENAME).isFile(),"failure signalled before gate release");
+        check(pickerTransfer.beginPicker() && pickerTransfer.claimResult(),"cancel fixture starts");
+        cancelRoot=root; productionCancel(racing.getName());
+        String cancel=new String(java.nio.file.Files.readAllBytes(new File(root,PICK_ERROR_FILENAME).toPath()),"UTF-8");
+        check(cancel.equals("cancelled:"+racing.getName()),"all Android cancellation signals matching pending destination");
+        check(pickerTransfer.beginPicker(),"cancel/start rejection releases picker"); pickerTransfer.finish();
+        pickerTransfer.restorePicker();
+        check(pickerTransfer.beginPicker(),"stale same-process saved picker does not re-arm completed transfer"); pickerTransfer.finish();
+        PickerTransferGate freshProcess=new PickerTransferGate();freshProcess.restorePicker();
+        check(freshProcess.isPicking() && freshProcess.claimResult(),"fresh-process restored pending picker accepts its result");freshProcess.finish();
+        final java.util.concurrent.atomic.AtomicInteger winners=new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.CountDownLatch simultaneous=new java.util.concurrent.CountDownLatch(1);
+        Thread[] contenders=new Thread[16];
+        for(int i=0;i<contenders.length;i++) {
+            contenders[i]=new Thread(new Runnable(){public void run(){
+                try {simultaneous.await();}catch(InterruptedException e){throw new AssertionError(e);}
+                if(pickerTransfer.beginPicker()) winners.incrementAndGet();
+            }}); contenders[i].start();
+        }
+        simultaneous.countDown();for(Thread contender:contenders) contender.join();
+        check(winners.get()==1,"simultaneous picker requests have exactly one owner");pickerTransfer.finish();
+        System.out.println("PASS Android importer copy: allowlist, async routing, atomic publication, exact bytes/MD5, failures, production-worker serialization, duplicate result/picker rejection and restoration");
     }
 '''
     code='import java.io.*; import java.security.*; import java.util.*; public class PickerCopyFixture {\n'+helpers+fixture+'\n}'
