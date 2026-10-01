@@ -126,7 +126,11 @@ function Parts.build(sprite,progress)
     end
     if any then
       -- Composer's per-tick canvas is floor/ceil of every enabled item.
-      local b=Composer.bounds(sprite.cells,nanr,nmcr,0,0)
+      -- Composer asserts (singular transform, oversized canvas) can reach a
+      -- frame the 240-tick atlas never rendered; skip parts rather than fail
+      -- the import. These calls never yield, so pcall is safe here.
+      local okB,b=pcall(Composer.bounds,sprite.cells,nanr,nmcr,0,0)
+      if not okB then return nil,"part state cannot be composed: "..tostring(b) end
       state.bounds={b.min_x,b.min_y,b.max_x,b.max_y}
       if not hull then hull={b.min_x,b.min_y,b.max_x,b.max_y} else
         hull[1]=math.min(hull[1],b.min_x);hull[2]=math.min(hull[2],b.min_y)
@@ -139,8 +143,9 @@ function Parts.build(sprite,progress)
           local pb=Composer.bounds(cells,nanr,nmcr,0,0)
           -- Items paint one pixel past their floor/ceil box; keep that fringe
           -- here and let the consumer clip it to the per-tick canvas.
-          local pixels,width,_,origin=Composer.renderIndexed(sprite.graphics,sprite.normal,cells,nanr,nmcr,0,0,
+          local okR,pixels,width,_,origin=pcall(Composer.renderIndexed,sprite.graphics,sprite.normal,cells,nanr,nmcr,0,0,
             {bounds={min_x=pb.min_x-1,min_y=pb.min_y-1,max_x=pb.max_x+2,max_y=pb.max_y+2}})
+          if not okR then return nil,"part piece cannot be composed: "..tostring(pixels) end
           local minx,miny,maxx,maxy=math.huge,math.huge,-math.huge,-math.huge
           for offset in pairs(pixels) do
             local x=(offset-1)%width+origin.min_x

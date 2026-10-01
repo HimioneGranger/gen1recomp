@@ -7,7 +7,8 @@
 - Complete playback for long idle animations from exporter 1.1 part tracks.
   Each multicell record keeps its own intro and loop on the shared 60 Hz
   tick; frames are composed on demand in the source compositor's OAM order.
-- Bounded part-model cache (four models) and composed-frame reuse by state.
+- Bounded caches for part plans (16), unpacked part pixels (6) and composed
+  frames (16), with composed-frame reuse while the state combination holds.
 
 ### Changed
 
