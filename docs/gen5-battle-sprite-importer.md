@@ -41,12 +41,47 @@ integer `durations` in ticks, zero-based `loopStartFrame`, `cycleTicks`,
 union and transparent background. Play the introduction once, then repeat the
 suffix starting at `loopStartFrame`; seconds per frame are `duration / tickRate`.
 
-Exports are bounded to 240 ticks. `cycleCapped = true` means the source's full
-cycle exceeds that bound; consumers should keep native graphics rather than
-looping a truncated animation. The provider example does this. Tested Black
-has 180 such side/gender variants across 56 species. All 2,596 side/gender
-variants parsed and composed successfully; this is separate from White or
-physical Quest verification.
+Atlas exports are bounded to 240 ticks. `cycleCapped = true` means the source's
+full cycle exceeds that bound; consumers should not loop the truncated atlas.
+Tested Black has 180 such side/gender variants across 56 species. Their parts
+have short loops, but the combined loop can be very long (664,224 ticks for one
+sprite), so baking it is not practical.
+
+## Part tracks (exporter 1.1.0)
+
+Exporter 1.1.0 keeps every capped atlas and its `cycleCapped = true` flag
+unchanged, and also publishes the complete animation as independent part
+tracks. The capped entry's `sprite` gains `partsEntry` (for example
+`parts/305/front`, with `/female` for genuine female art) and `partsPalette`
+(`normal` or `shiny`). One `parts/...` entry serves both palettes:
+
+- Its PNG is a palette-index atlas: red holds the source palette index and
+  alpha 255 marks an opaque pixel. Its `sprite` is an inert atlas descriptor
+  (`kind = "parts"`, 64-pixel rows, `cycleCapped = true`) so 1.0 consumers
+  validate and skip it.
+- Its `metadata` file (read with `mod.packs:metadata`) holds `format =
+  "gen5-parts"`, `version = 1`, `tickRate = 60`, the union `width`/`height`
+  and anchors, both palettes, `pieces` (six integers each: x, y, w, h, atlas x,
+  atlas y, union-relative) and one track per multicell record. A track has
+  `intro`, `period`, run-length `runs` (length, state) covering intro plus one
+  loop, and `states` (nine integers each: has-canvas flag, canvas x0, y0, x1, y1,
+  then the piece for OAM priorities 0 to 3, or 0).
+
+A track's local tick is `t` during the intro, then
+`intro + (t - intro) % period`. Paint priority groups 3 down to 0, and inside
+each group records last to first, clipped to the union of the current states'
+canvas boxes. This reproduces the source compositor's global order (priority,
+then reverse insertion index) and its per-tick canvas exactly. Pieces are
+rendered by the same compositor, one record, frame and priority at a time. A variant
+that exceeds a part-track bound (65,536 ticks per track, 4,096 states per track,
+8,192 states or 4,096 pieces in all, a 256-pixel union, or the 8 MiB entry
+limit) keeps only its capped atlas and native fallback; the job result lists it
+in `partTracksSkipped` and the import continues. None are skipped on tested
+Black.
+On tested Black all 104 capped graphics variants (90 male sides and 14
+genuine female sides) matched the per-tick compositor pixel for pixel at
+sampled ticks up to 2^31. All 2,596 side/gender variants parsed and composed
+successfully; this is separate from White or physical Quest verification.
 
 `mods/examples/gen5_battle_sprites` exposes the shared provider API for Gen 1,
 Gen 2, Gen 3 and renderer adapters. It does not replace battle art by itself.
