@@ -1816,16 +1816,15 @@ function RomImporter:focus(f)
   -- launcher that said nothing at all.
   local pickError = love.filesystem.getInfo("pick_error.flag", "file")
     and love.filesystem.read("pick_error.flag")
+  if pickError then love.filesystem.remove("pick_error.flag") end
   if pickError and self:_importerPickPending() then
     local destination = pickError:gsub("^cancelled:", "")
     if destination ~= importerPickName(self.pickerPendingImporterId) then
       -- A previous request's failure does not retire this transfer.
-      love.filesystem.remove("pick_error.flag")
       pickError = nil
     end
   end
   if pickError then
-    love.filesystem.remove("pick_error.flag")
     local text
     if pickError:find("cancelled:", 1, true) == 1 then
       text = "The file manager did not return a file. Try a different file "
