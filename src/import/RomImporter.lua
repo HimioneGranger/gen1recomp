@@ -4576,9 +4576,9 @@ function RomImporter:_runImporter(importerId, path)
 end
 
 function RomImporter:_runImporterData(importerId, data)
-  local modules = { lttp = "src.import.lttp.LttpImport", pmd_red = "src.import.pmd.PmdImport" }
-  if not modules[importerId] then return end
-  local importer = require(modules[importerId])
+  local descriptor = require("src.import.Importers").get(importerId)
+  if not (descriptor and descriptor.module) then return end
+  local importer = require(descriptor.module)
   local source, err = importer.identify(data)
   if not source then
     self._importerNotice = { text = tostring(err) }
@@ -4596,7 +4596,7 @@ end
 function RomImporter:_stepImporter()
   local job = self._importerJob
   if not job then return end
-  local budget = job.id == "pmd_red" and 1 or 24
+  local budget = (job.id == "pmd_red" or job.id == "gen5_bw") and 1 or 24
   while budget > 0 do
     budget = budget - 1
     if coroutine.status(job.co) == "dead" then break end

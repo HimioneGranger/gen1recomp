@@ -645,6 +645,11 @@ public class GameActivity extends SDLActivity {
             && !normalized.endsWith("/..");
     }
 
+    private static boolean isImporterDestination(String relative) {
+        return relative != null
+            && relative.matches("picked_importer_[a-z0-9_-]+\\.bin");
+    }
+
     /** Legacy single-argument entry; resolves the save dir itself. */
     @Keep
     public static boolean showFilePicker(String destFilename) {
@@ -1801,9 +1806,9 @@ public class GameActivity extends SDLActivity {
         }
         final InputStream pickedSource = source;
         final File pickedRoot = destDir;
-        if (directRequired) {
-            // Optical-disc-sized imports must not block Android's UI thread and
-            // must not create a second picked_required_import.bin copy.
+        if (directRequired || isImporterDestination(destName)) {
+            // Large importer sources must not block Android's UI thread. The
+            // final basename appears only when the complete copy is published.
             new Thread(new Runnable() {
                 @Override public void run() {
                     PickCopyResult result = copyRequiredImport(pickedSource, destFile);
@@ -1811,11 +1816,13 @@ public class GameActivity extends SDLActivity {
                         writeFlagFile(pickedRoot, PICK_ERROR_FILENAME, destName);
                         return;
                     }
-                    String marker = "v1\n" + destName + "\n" + result.md5 + "\n"
-                        + Long.toString(result.bytes) + "\n";
-                    writeFlagFile(pickedRoot, PICK_COMPLETE_FILENAME, marker);
+                    if (directRequired) {
+                        String marker = "v1\n" + destName + "\n" + result.md5 + "\n"
+                            + Long.toString(result.bytes) + "\n";
+                        writeFlagFile(pickedRoot, PICK_COMPLETE_FILENAME, marker);
+                    }
                 }
-            }, "gen1recomp-required-import").start();
+            }, "gen1recomp-picker-import").start();
             return;
         }
 
