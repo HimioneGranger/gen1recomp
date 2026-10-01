@@ -1,4 +1,4 @@
-package.path='./?.lua;'..package.path
+package.path='./?.lua;./?/init.lua;'..package.path
 local T=require('tests.modkit')
 local Bw=require('src.import.gen5.BwImport')
 local Composer=require('src.import.gen5.Composer')
