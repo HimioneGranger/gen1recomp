@@ -147,6 +147,8 @@ function Field.start(mod, game, session)
 end
 
 function Field.stop()
+  local Stream = package.loaded["src.core.game3.asset_stream"]
+  if Stream then Stream.cancelPending() end
   lazyReq("src.world.game3.Follower").reset()
   Field.running = false
   Field._session = nil
@@ -213,9 +215,9 @@ function Field.update(_dt)
   local Ghosts = lazyReq("src.core.game3.ghosts")
   Ghosts.sync()
   Ghosts.update(game)
-  -- pre-load tileset pairs queued by a seamless world refresh, one per frame
+  -- Prepare nearby assets on a worker; share a main-thread texture budget.
   local MapMod = package.loaded["src.core.game3.map"]
-  if MapMod and MapMod._warmQueue and MapMod.stepWarm then MapMod.stepWarm() end
+  if MapMod and MapMod.stepWarm then MapMod.stepWarm(game) end
 
   Field.pollMapChange(game)
   -- pokefirered/src/safari_zone.c:60 CB2_EndSafariBattle
@@ -1293,6 +1295,19 @@ function Field.executeFieldMove(payload)
       onPick = function(section) Field.flyTo(section, payload.mon) end,
       onClose = function() Field.locked = false end,
     })
+  elseif act == "braille_regirock" or act == "braille_registeel" then
+    Field.locked = true
+    -- pokeemerald/src/braille_puzzles.c:264
+    showMon(function()
+      local session = Field._session
+      if lazyReq("src.core.game3.constants").versionOf(session) == "emerald" then
+        local BrailleField = lazyReq("src.core.game3.braille_field")
+        local valid = act == "braille_regirock" and BrailleField.shouldDoRegirock(session)
+          or act == "braille_registeel" and BrailleField.shouldDoRegisteel(session)
+        if valid then BrailleField.doRegiEffect(session) end
+      end
+      Field.locked = false
+    end)
   elseif act == "rock_smash" then
     Field.locked = true
     -- pokefirered/src/fldeff_rocksmash.c:123
@@ -1380,6 +1395,15 @@ function Field.executeFieldMove(payload)
     -- pokefirered/src/fldeff_dig.c:32
     showMon(function()
       local Session = Field._session
+      -- pokeemerald/src/fldeff_dig.c:54
+      if lazyReq("src.core.game3.constants").versionOf(Session) == "emerald" then
+        local BrailleField = lazyReq("src.core.game3.braille_field")
+        if BrailleField.shouldDoDig(Session) then
+          BrailleField.doDig(Session)
+          Field.locked = false
+          return
+        end
+      end
       local warp = type(payload.warp) == "table" and payload.warp or {}
       local dest = warp.map or (Session and Session.healMap)
       -- pokefirered/src/fldeff_dig.c:39 StartDigFieldEffect
