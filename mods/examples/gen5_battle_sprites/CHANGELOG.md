@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.0.0] - 2026-10-01
+
+### Changed
+
+- Provider API and capability contract version 2 return the original animation
+  union dimensions for every atlas and complete part-track frame. All source
+  pixels and transparent margins are preserved; the 64×64 sampling path is removed.
+- Frames report actual width and height with `groundOffset = height / 2` for
+  the bottom anchor relative to image center. Renderers must accept API version
+  2 and use variable frame dimensions when choosing display scale.
+- Capabilities advertise `nativeResolution`, `variableDimensions`, and maximum
+  frame dimensions of 256×256. Fixed `frameWidth`/`frameHeight` fields are removed.
+- Existing exporter 1.1 packs already contain the original pixels and need no
+  ROM reimport. Shared-clock timing, bounded caches and fallback remain intact.
+
 ## [1.3.0] - 2026-10-01
 
 ### Added

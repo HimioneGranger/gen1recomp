@@ -1,6 +1,6 @@
 # Black/White battle sprite importer
 
-Open **IMPORTERS → Pokemon Black / White** and choose your own untrimmed 256 MiB
+Open **IMPORTERS â†’ Pokemon Black / White** and choose your own untrimmed 256 MiB
 Black or White `.nds` cartridge dump. Unzip it first. The importer runs inside
 the engine: no Windows decoder, download, or separate Python tool is required.
 It reads the ROM locally and writes a shared pack in the save directory at
@@ -12,7 +12,7 @@ codes beginning `IRA` or `IRB`, and records the source MD5. It does not use an
 MD5 allowlist. Black (IRBO, USA/Europe) was tested; White and other regions have
 not yet been verified. Black 2 / White 2 and trimmed dumps are unsupported.
 
-The pack exports national dex 1–649 base forms, front/back, normal/shiny and
+The pack exports national dex 1â€“649 base forms, front/back, normal/shiny and
 female variants. Missing female graphics use the source's male/unisex graphics.
 Exporter 1.0.1 reuses the same atlas file for those identical gender variants,
 keeping all entry IDs available. On tested Black this removes 2,212 duplicate
@@ -87,6 +87,27 @@ successfully; this is separate from White or physical Quest verification.
 Gen 2, Gen 3 and renderer adapters. It does not replace battle art by itself.
 A voxel renderer opts in through its adapter, so importing a pack has no
 gameplay or rendering effect with no consumer installed.
+
+## Original-resolution provider output (provider 2.0.0)
+
+Provider API and capability contract version 2 return original pixels for every
+`frame(request)` call, with no resolution selector or 64×64 sampling path.
+The returned `width` and `height` are the original animation-union canvas
+dimensions, bounded to 256 pixels per side, for both ordinary atlas frames
+and complete part-track animations. Transparent margins stay in place; the
+provider does not crop each pose or change the canvas between frames.
+`groundOffset = height / 2` locates the bottom anchor relative to image center.
+Renderers must accept `apiVersion == 2`, use the returned dimensions and anchor,
+and choose the display scale. Capabilities advertise `nativeResolution = true`,
+`variableDimensions = true`, `maxFrameWidth = 256`, and `maxFrameHeight = 256`;
+the fixed `frameWidth`/`frameHeight` fields are removed. The shared simulation
+clock, battler identity, bounded caches, session cleanup and fallback remain.
+
+Existing exporter 1.1 packs already store these original pixels and require no
+ROM reimport. Importing a pack or enabling this provider alone does not update
+battle rendering; the consuming adapter must support the version 2 contract.
+The manifest's `api = 2` identifies the engine mod API separately from the
+provider's renderer contract.
 
 ## Import lifecycle and distribution
 

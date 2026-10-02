@@ -113,15 +113,13 @@ local function imageFor(id, entry, frame)
   end
   atlases[id], atlasCount = {data = data, used = serial}, atlasCount + 1
   end
-  local out = love.image.newImageData(64, 64)
-  local scale = math.min(64 / entry.width, 64 / entry.height, 1)
-  local w, h = math.max(1, math.floor(entry.width * scale)), math.max(1, math.floor(entry.height * scale))
-  local ox, oy = math.floor((64 - w) / 2), 64 - h
+  local W, H = entry.width, entry.height
+  local out = love.image.newImageData(W, H)
   local sx = ((frame - 1) % entry.columns) * entry.width
   local sy = math.floor((frame - 1) / entry.columns) * entry.height
-  for y = 0, h - 1 do
-    for x = 0, w - 1 do
-      out:setPixel(ox + x, oy + y, data:getPixel(sx + math.floor(x / scale), sy + math.floor(y / scale)))
+  for y = 0, H - 1 do
+    for x = 0, W - 1 do
+      out:setPixel(x, y, data:getPixel(sx + x, sy + y))
     end
   end
   local image = love.graphics.newImage(out)
@@ -154,7 +152,7 @@ local function paletteBytes(values)
   end
   return out
 end
--- A plan holds the tracks, piece rectangles, palettes and output mapping. It
+-- A plan holds the tracks, piece rectangles and palettes. It
 -- is small, so many stay cached; a composite-cache hit needs only the plan.
 local function loadPlan(partsId)
   local pe = partEntries[partsId]
@@ -223,22 +221,12 @@ local function loadPlan(partsId)
     if n ~= span then error("part run length mismatch", 0) end
     tracks[r] = {intro = t.intro, period = t.period, at = at}
   end
-  -- Output mapping matches the atlas path: integer downscale sampling, centered,
-  -- bottom-anchored in a 64x64 frame.
-  local scale = math.min(64 / W, 64 / H, 1)
-  local w, h = math.max(1, math.floor(W * scale)), math.max(1, math.floor(H * scale))
-  local colSrc, rowSrc, colFirst, rowFirst = {}, {}, {}, {}
-  for x = 0, w - 1 do colSrc[x] = math.floor(x / scale) end
-  for y = 0, h - 1 do rowSrc[y] = math.floor(y / scale) end
-  local x = 0
-  for u = 0, W do while x < w and colSrc[x] < u do x = x + 1 end; colFirst[u] = x end
-  local y = 0
-  for v = 0, H do while y < h and rowSrc[y] < v do y = y + 1 end; rowFirst[v] = y end
+  -- The animation-union canvas is fixed across poses, with one output
+  -- pixel for every source pixel and all transparent margins preserved.
   local strings = {}
-  for i = 1, 4096 do strings[i] = TRANSPARENT end
-  return {width = W, height = H, tracks = tracks, pieces = pieces, w = w, h = h,
-    ox = math.floor((64 - w) / 2), oy = 64 - h, colSrc = colSrc, rowSrc = rowSrc,
-    colFirst = colFirst, rowFirst = rowFirst, out = {}, strings = strings, states = {}, key = {},
+  for i = 1, W * H do strings[i] = TRANSPARENT end
+  return {width = W, height = H, tracks = tracks, pieces = pieces,
+    out = {}, strings = strings, states = {}, key = {},
     palettes = {normal = paletteBytes(meta.palettes.normal), shiny = paletteBytes(meta.palettes.shiny)}}
 end
 -- Palette indices per piece, unpacked from the index atlas (red = index,
@@ -296,7 +284,7 @@ local function selectStates(plan, tick)
   return states, table.concat(key, ",")
 end
 local function compose(plan, states, colors, data)
-  local W, H, w, h = plan.width, plan.height, plan.w, plan.h
+  local W, H = plan.width, plan.height
   local cx0, cy0, cx1, cy1 = math.huge, math.huge, -math.huge, -math.huge
   for r = 1, #plan.tracks do
     local b = states[r].bounds
@@ -308,8 +296,8 @@ local function compose(plan, states, colors, data)
     end
   end
   cx0, cy0, cx1, cy1 = math.max(cx0, 0), math.max(cy0, 0), math.min(cx1, W), math.min(cy1, H)
-  local out, colSrc, rowSrc, colFirst, rowFirst = plan.out, plan.colSrc, plan.rowSrc, plan.colFirst, plan.rowFirst
-  for i = 1, w * h do out[i] = 0 end
+  local out = plan.out
+  for i = 1, W * H do out[i] = 0 end
   if cx0 < cx1 and cy0 < cy1 then
     for p = 4, 1, -1 do
       for r = #plan.tracks, 1, -1 do
@@ -320,11 +308,10 @@ local function compose(plan, states, colors, data)
           local v0, v1 = math.max(py, cy0), math.min(py + piece.h, cy1)
           if u0 < u1 and v0 < v1 then
             local values = data[piece.index]
-            local x0, x1 = colFirst[u0], colFirst[u1] - 1
-            for y = rowFirst[v0], rowFirst[v1] - 1 do
-              local base, row = (rowSrc[y] - py) * pw - px + 1, y * w + 1
-              for x = x0, x1 do
-                local v = values[base + colSrc[x]]
+            for y = v0, v1 - 1 do
+              local base, row = (y - py) * pw - px + 1, y * W + 1
+              for x = u0, u1 - 1 do
+                local v = values[base + x]
                 if v ~= 0 then out[row + x] = v end
               end
             end
@@ -333,13 +320,8 @@ local function compose(plan, states, colors, data)
       end
     end
   end
-  local strings, ox, oy = plan.strings, plan.ox, plan.oy
-  for y = 0, h - 1 do
-    local row, dest = y * w + 1, (oy + y) * 64 + ox + 1
-    for x = 0, w - 1 do
-      strings[dest + x] = colors[out[row + x]] or TRANSPARENT
-    end
-  end
+  local strings = plan.strings
+  for i = 1, W * H do strings[i] = colors[out[i]] or TRANSPARENT end
   return table.concat(strings)
 end
 -- Composed frames are cached by the exact state combination, separately from
@@ -350,9 +332,9 @@ local function compositeFor(id, entry, tick)
   local key = id .. "@" .. signature
   serial = serial + 1
   local hit = composites[key]
-  if hit then hit.used = serial; return hit.image, key end
+  if hit then hit.used = serial; return hit.image, key, plan.width, plan.height end
   local data = pixelsFor(entry.parts, plan)
-  local rgba = love.image.newImageData(64, 64, "rgba8", compose(plan, states, plan.palettes[entry.palette], data))
+  local rgba = love.image.newImageData(plan.width, plan.height, "rgba8", compose(plan, states, plan.palettes[entry.palette], data))
   local image = love.graphics.newImage(rgba)
   release(rgba)
   image:setFilter("nearest", "nearest")
@@ -361,7 +343,7 @@ local function compositeFor(id, entry, tick)
     release(composites[oldest].image); composites[oldest] = nil; compositeCount = compositeCount - 1
   end
   composites[key], compositeCount = {image = image, used = serial}, compositeCount + 1
-  return image, key
+  return image, key, plan.width, plan.height
 end
 
 local function clear()
@@ -372,13 +354,14 @@ local function clear()
   imageCount, compositeCount, atlasCount, planCount, pixelCount, clock = 0, 0, 0, 0, 0, 0
 end
 
-mod.exports.api = 1
-mod.exports.apiVersion = 1
+mod.exports.api = 2
+mod.exports.apiVersion = 2
 -- Art generation is independent of the receiving game or voxel engine.
 mod.exports.capabilities = {
-  contract = "national-dex-battle-sprites", version = 1,
+  contract = "national-dex-battle-sprites", version = 2,
   source = "gen5_bw", maxDex = 649, sides = {"front", "back"},
-  shiny = true, female = true, frameWidth = 64, frameHeight = 64,
+  shiny = true, female = true, nativeResolution = true, variableDimensions = true,
+  maxFrameWidth = 256, maxFrameHeight = 256,
   clock = "input.step", optional = true,
 }
 function mod.exports.status()
@@ -418,12 +401,14 @@ function mod.exports.frame(request)
     if slot.partTick == elapsed and composites[slot.partKey] then
       local hit = composites[slot.partKey]
       serial = serial + 1; hit.used = serial
-      return {image = hit.image, width = 64, height = 64, groundOffset = 32, frame = elapsed + 1, entryId = id}
+      return {image = hit.image, width = slot.partWidth, height = slot.partHeight,
+        groundOffset = slot.partHeight / 2, frame = elapsed + 1, entryId = id}
     end
-    local ok, image, key = pcall(compositeFor, id, entry, elapsed)
+    local ok, image, key, width, height = pcall(compositeFor, id, entry, elapsed)
     if not ok then entries[id] = nil; warn(image); return nil end
     slot.partTick, slot.partKey = elapsed, key
-    return {image = image, width = 64, height = 64, groundOffset = 32, frame = elapsed + 1, entryId = id}
+    slot.partWidth, slot.partHeight = width, height
+    return {image = image, width = width, height = height, groundOffset = height / 2, frame = elapsed + 1, entryId = id}
   end
   local phase, frame = elapsed, 1
   if elapsed >= entry.intro then
@@ -435,7 +420,8 @@ function mod.exports.frame(request)
   end
   local ok, image = pcall(imageFor, id, entry, frame)
   if not ok then entries[id] = nil; warn(image); return nil end
-  return {image = image, width = 64, height = 64, groundOffset = 32, frame = frame, entryId = id}
+  local width, height = entry.width, entry.height
+  return {image = image, width = width, height = height, groundOffset = height / 2, frame = frame, entryId = id}
 end
 local ok, err = pcall(loadIndex)
 if not ok then entries = {}; warn(err) end

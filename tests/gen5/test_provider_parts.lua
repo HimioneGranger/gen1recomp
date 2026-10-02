@@ -1,4 +1,4 @@
--- Provider 1.3 part-track playback through the real ModSDK loader. Lives with
+-- Provider 2.0 part-track playback through the real ModSDK loader. Lives with
 -- the engine tests because it builds procedural fixtures with engine modules.
 package.path="./?.lua;./?/init.lua;"..package.path
 local T=require("tests.modkit")
@@ -27,8 +27,7 @@ local oldImage,oldNewImage,oldFileData=love.image.newImageData,love.graphics.new
 love.filesystem.newFileData=function(bytes)return bytes end
 local files
 -- Exporter 1.1 part tracks: a procedural sprite wider than 64 pixels whose
--- tracks have different intros and loops. The provider's 64x64 output must
--- equal the reference compositor, downscaled exactly like the atlas path.
+-- tracks have different intros and loops. All original pixels must survive.
 local Parts=require("src.import.gen5.Parts")
 local LuaWriter=require("src.import.LuaWriter")
 local graphics={bpp=4}
@@ -53,7 +52,7 @@ local nmcr={maps={{records={{animation_index=0,x=-40,y=0},{animation_index=1,x=0
   {animation_index=2,x=40,y=-6},{animation_index=3,x=10,y=10}}}}}
 local sprite={graphics=graphics,cells=cells,nanr=nanr,nmcr=nmcr,map=0,normal=palette(0),shiny=palette(90)}
 local model=Parts.layout(Parts.build(sprite))
-T.check(model.width>64,"procedural part sprite exercises the downscale path")
+T.check(model.width>64,"procedural part sprite exercises full-width output beyond 64 pixels")
 local meta=Parts.metadata(model,sprite)
 local metaBytes=LuaWriter.encode(meta)
 local stub=Parts.stub(model)
@@ -70,6 +69,10 @@ local partsPng=string.char(137).."PNG"..string.char(13,10,26,10)..u32(13).."IHDR
 local partsPack={format=1,importer="gen5_bw",pack="battle_sprites",kind="sprite",version="1.1.0",
   source={name="Procedural test fixture",md5=string.rep("0",32),size=0},entries={}}
 partsPack.entries["normal/025/front"]=entry()
+-- A large atlas fixture must keep every source pixel in native mode.
+local largePng=string.char(137).."PNG"..string.char(13,10,26,10)..u32(13).."IHDR"..u32(90)..u32(85)
+partsPack.entries["normal/384/front"]={file="large.png",size=#largePng,width=90,height=85,
+  sprite={width=90,height=85,columns=1,frames=1,tickRate=60,durations={12}}}
 partsPack.entries["parts/030/front"]={file="parts.png",size=#partsPng,width=stub.width,height=stub.height*stub.frames,
   frames=stub.frames,sprite=stub,metadata={file="parts.lua",size=#metaBytes}}
 for _,name in ipairs({"normal","shiny"}) do
@@ -121,6 +124,7 @@ partsPack.entries["normal/032/front"]=orphan
 files=baseFiles()
 files["asset_packs/gen5_bw/battle_sprites/pack.lua"]="return "..encode(partsPack)
 files["asset_packs/gen5_bw/battle_sprites/synthetic.png"]=png
+files["asset_packs/gen5_bw/battle_sprites/large.png"]=largePng
 files["asset_packs/gen5_bw/battle_sprites/parts.png"]=partsPng
 files["asset_packs/gen5_bw/battle_sprites/parts.lua"]=metaBytes
 files["asset_packs/gen5_bw/battle_sprites/bad.lua"]=badMeta
@@ -133,10 +137,16 @@ love.image.newImageData=function(a,b,c,d)
     if a==fringePng then return {getString=function()return fringeRgba end,release=function()end} end
     return {getPixel=function(_,x,y)return x,y,0,1 end,release=function()end}
   end
-  if c=="rgba8" then composes=composes+1;lastPixels=d;T.check(a==64 and b==64 and #d==16384,"composite is 64x64 RGBA") end
-  return {setPixel=function()end,release=function()end,pixels=d}
+  if c=="rgba8" then
+    composes=composes+1;lastPixels=d
+    T.check(#d==a*b*4,"composite byte length matches native dimensions")
+  end
+  local data={width=a,height=b,pixels=d,samples={},release=function()end}
+  function data:setPixel(x,y,r,g,blue,alpha) self.samples[y*self.width+x+1]={r,g,blue,alpha} end
+  return data
 end
-love.graphics.newImage=function(data)return {setFilter=function()end,release=function()end,pixels=data.pixels} end
+love.graphics.newImage=function(data)return {setFilter=function()end,release=function()end,
+  pixels=data.pixels,width=data.width,height=data.height,samples=data.samples} end
 local partsRun=run(files)
 T.eq(#partsRun.errors,0,"real loader reads a 1.1 pack with part-track metadata")
 local pe=assert(partsRun.loader.exports.GEN5_PRIVATE_SPRITES)
@@ -146,21 +156,18 @@ local function expected(tick,name,m,md)
   local model,meta=m or model,md or meta
   local idx=Parts.composeIndexed(model,tick)
   local W,H=model.width,model.height
-  local scale=math.min(64/W,64/H,1)
-  local w,h=math.max(1,math.floor(W*scale)),math.max(1,math.floor(H*scale))
-  local ox,oy=math.floor((64-w)/2),64-h
   local pal,out=meta.palettes[name],{}
-  for i=1,4096 do out[i]="\0\0\0\0" end
-  for y=0,h-1 do for x=0,w-1 do
-    local v=idx[math.floor(y/scale)*W+math.floor(x/scale)+1]
-    if v then out[(oy+y)*64+ox+x+1]=string.char(pal[v*4+1],pal[v*4+2],pal[v*4+3],pal[v*4+4]) end
+  for i=1,W*H do out[i]="\0\0\0\0" end
+  for y=0,H-1 do for x=0,W-1 do
+    local v=idx[y*W+x+1]
+    if v then out[y*W+x+1]=string.char(pal[v*4+1],pal[v*4+2],pal[v*4+3],pal[v*4+4]) end
   end end
   return table.concat(out)
 end
 local preq={dex=30,side="front",battleId=2,battlerId=1,mon={}}
 local first=assert(pe.frame(preq),"capped entry with part tracks plays instead of falling back")
 T.eq(first.entryId,"normal/030/front","part entry id")
-T.eq(first.width,64,"part output width");T.eq(first.height,64,"part output height")
+T.eq(first.width,model.width,"part output width");T.eq(first.height,model.height,"part output height")
 T.eq(partDecodes,1,"part atlas decoded once")
 local exact,tick,before=true,0,composes
 for t=0,400 do
@@ -213,6 +220,51 @@ local afterFirst=partDecodes
 for _,req in ipairs(rotation) do pe.frame(req) end
 T.eq(partDecodes,afterFirst,"repeated calls at the same tick reuse composites without decoding")
 T.check(afterFirst-decodesBefore<=7,"each rotation sprite decodes at most once to compose")
+-- Native resolution is the only output contract; no 64x64 resampling path.
+T.check(pe.capabilities.nativeResolution==true,"provider advertises native resolution")
+local function nativeExpected(tick,name)
+  local idx=Parts.composeIndexed(model,tick)
+  local pal,out=meta.palettes[name],{}
+  for i=1,model.width*model.height do
+    local v=idx[i]
+    out[i]=v and string.char(pal[v*4+1],pal[v*4+2],pal[v*4+3],pal[v*4+4]) or "\0\0\0\0"
+  end
+  return table.concat(out)
+end
+preq.mon={}
+local nativeFirst=assert(pe.frame(preq))
+T.eq(nativeFirst.width,model.width,"native parts preserve original width")
+T.eq(nativeFirst.height,model.height,"native parts preserve original height")
+T.eq(nativeFirst.groundOffset,model.height/2,"native bottom anchor uses image half-height")
+local nativeExact=true
+for t=0,400 do
+  local nf=assert(pe.frame(preq))
+  if nf.image.pixels~=nativeExpected(t,"normal") or nf.frame~=t+1 then nativeExact=false;break end
+  if pe.frame(preq).image~=nf.image then nativeExact=false;break end
+  pstep(1/60)
+end
+T.check(nativeExact,"401 native frames retain every pixel; stereo shares the image and clock")
+pstep(100000)
+local nativeDeep=assert(pe.frame(preq))
+T.eq(nativeDeep.image.pixels,nativeExpected(nativeDeep.frame-1,"normal"),"native parts stay exact past six million ticks")
+local nativeShiny={dex=30,side="front",shiny=true,battleId=8,battlerId=1,mon={}}
+T.eq(pe.frame(nativeShiny).image.pixels,nativeExpected(0,"shiny"),"native shiny palette is exact")
+local largeReq={dex=384,side="front",battleId=9,battlerId=1,mon={}}
+local large=assert(pe.frame(largeReq))
+T.eq(large.width,90,"native atlas keeps Rayquaza-sized width")
+T.eq(large.height,85,"native atlas keeps Rayquaza-sized height")
+T.eq(large.groundOffset,42.5,"odd native height preserves bottom anchor")
+local allPixels=true
+for y=0,84 do for x=0,89 do
+  local pixel=large.image.samples[y*90+x+1]
+  if not pixel or pixel[1]~=x or pixel[2]~=y then allPixels=false end
+end end
+T.check(allPixels,"native atlas copies all 7650 pixels without resampling")
+T.eq(pe.apiVersion,2,"variable dimension output declares receiver API 2")
+T.eq(pe.frame(largeReq).image,large.image,"native atlas cache reuses the same full-resolution image")
+st=pe.status()
+T.check(st.cachedImages<=8 and st.cachedComposites<=16 and st.cachedPartPlans<=16 and st.cachedPartPixels<=6,
+  "native resolution caches remain bounded")
 partsRun.loader.events:emit("core.session_ending",{})
 st=pe.status()
 T.check(st.cachedComposites==0 and st.cachedPartPlans==0 and st.cachedPartPixels==0,"session releases part caches")
