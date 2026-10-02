@@ -3121,8 +3121,10 @@ function OverworldState:billsHousePokemonList()
     end
     table.insert(items, { label = Strings("CANCEL") })
     -- TextBoxBorder b=10,c=9 at (0,0) -> total tw=11, th=12
-    Game.stack:push(Menu.new(Game, items,
-      { tx = 0, ty = 0, tw = 11, th = 12 }))
+    local menu = Menu.new(Game, items,
+      { tx = 0, ty = 0, tw = 11, th = 12 })
+    menu.isMenu = true
+    Game.stack:push(menu)
   end
   Game.stack:push(TextBox.new(Game, t._BillsHousePokemonListText1
     or Strings("BILL's favorite\nPOKéMON list!"), openList))
@@ -3693,6 +3695,7 @@ function OverworldState:openPC(onDone)
   menu = Menu.new(Game, items,
     { tx = 0, ty = 0, tw = 16, th = #items * 2 + 2, onCancel = logOff,
       noSound = true })
+  menu.isMenu = true
   -- engine/menus/pc.asm:5
   Game.stack:push(TextBox.new(Game,
     (Game.data.text or {})._TurnedOnPC1Text
@@ -5881,7 +5884,11 @@ function OverworldState:drawWipeSprites()
   end
   local ok, err = pcall(function()
     local keep = self.battleOamKeep
-    if keep and keep.draw then replay(keep) end
+    if keep and keep.draw then
+      for _, entity in ipairs(self.entities) do
+        if entity == keep then replay(keep) break end
+      end
+    end
     if not (self.flyAnim or self.flyArrive or self.playerHidden) then
       replay(self.player)
     end
