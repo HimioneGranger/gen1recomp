@@ -1,5 +1,3 @@
--- Synthetic part-track tests: component tick/loop rules, global OAM tie order,
--- per-tick canvas clipping and the serialized descriptor. No cartridge data.
 package.path="./?.lua;./?/init.lua;"..package.path
 local T=require("tests.modkit")
 local Animation=require("src.import.gen5.Animation")
@@ -7,8 +5,6 @@ local Composer=require("src.import.gen5.Composer")
 local Parts=require("src.import.gen5.Parts")
 local LuaWriter=require("src.import.LuaWriter")
 
--- Component cycle: Parts.cycle must reproduce Animation.frame for every
--- playback type, loop start and zero-duration edge case, far past one loop.
 local function frames(list)
   local out={}
   for i,d in ipairs(list) do out[i]={cell_id=i-1,duration=d} end
@@ -47,7 +43,6 @@ do
   T.eq(Parts.trackTick(intro,period,2+7*1000000+3),5,"deep ticks keep the loop phase")
 end
 
--- Synthetic tiles: deterministic pattern with transparent holes.
 local graphics={bpp=4}
 function graphics:getPixel(tile,x,y)
   if (x+y+tile)%5==0 then return 0 end
@@ -78,8 +73,6 @@ local function compare(sprite,model,tick)
   return m==n,n
 end
 
--- Multi-track sprite: four records with intro, ping-pong, one-shot hold and an
--- affine scaled track. Its global loop is long; tracks stay independent.
 local cells={cells={
   {oams={oam(-8,-8,16,16,0,1),oam(4,-4,8,8,9,2)}},
   {oams={oam(-8,-8,16,8,4,1,{flip_h=true})}},
@@ -120,16 +113,13 @@ for _,t in ipairs(ticks) do
 end
 T.check(allTicks and pixels>0,"part composition equals the source compositor at every checked tick, including deep ticks")
 
--- Overlapping priorities: one shared pixel covered by five objects.
--- Composer.objects sorts priority descending, then insertion index descending,
--- so lower priority values win and earlier records/OAMs win ties.
 local flat={bpp=4}
 function flat:getPixel(tile) return tile+1 end
 local tie={cells={
-  {oams={oam(0,0,8,8,0,2),oam(0,0,8,8,1,0)}},  -- record 1: A prio 2, B prio 0
-  {oams={oam(0,0,8,8,2,1)}},                  -- record 2: C prio 1
-  {oams={oam(0,0,8,8,3,0)}},                  -- record 3: D prio 0 (ties B)
-  {oams={oam(0,0,8,8,4,1)}},                  -- record 4: E prio 1 (ties C)
+  {oams={oam(0,0,8,8,0,2),oam(0,0,8,8,1,0)}},
+  {oams={oam(0,0,8,8,2,1)}},
+  {oams={oam(0,0,8,8,3,0)}},
+  {oams={oam(0,0,8,8,4,1)}},
 }}
 local still={animations={}}
 for i=1,4 do still.animations[i]={loop_start=0,playback_type=2,frames={{cell_id=i-1,duration=1}}} end
@@ -151,24 +141,19 @@ local s3=tieSprite({1,3,0})
 local m3=Parts.layout(Parts.build(s3))
 T.eq(Parts.composeIndexed(m3,0)[1],2,"a later record's priority-0 OAM beats earlier priority-1 records")
 T.check(compare(s3,m3,0),"mixed-priority records equal Composer")
--- Per-record flattening (paint each record as one layer, last to first)
--- would show record 1's B over record 3's D only by accident of order; with
--- record 1 = {A prio2, B prio0} last-painted it hides the priority-1 record.
+
 local s4=tieSprite({1,0})
 local m4=Parts.layout(Parts.build(s4))
 T.eq(Parts.composeIndexed(m4,0)[1],2,"record 2's priority-0 OAM B wins over record 1's priority-1 C")
 T.check(compare(s4,m4,0),"priority groups split a record exactly as Composer does")
 T.eq(#m4.pieces,3,"a mixed-priority cell yields one piece per priority group")
--- Same-cell tie: serialized-first OAM wins.
+
 local same={cells={{oams={oam(0,0,8,8,5,1),oam(0,0,8,8,6,1)}}}}
 local s5={graphics=flat,cells=same,nanr={animations={{loop_start=0,playback_type=2,frames={{cell_id=0,duration=1}}}}},
   nmcr={maps={{records={{animation_index=0,x=0,y=0}}}}},map=0,normal=palette(0),shiny=palette(0)}
 local m5=Parts.layout(Parts.build(s5))
 T.eq(Parts.composeIndexed(m5,0)[1],6,"same-priority serialized-first OAM wins inside a cell")
 
--- Canvas fringe: a 4x scaled object paints one column left of its own box,
--- but only when another record widens that tick's canvas. Parity must hold
--- in both states, which needs the per-tick canvas clip.
 local fringe={cells={{oams={oam(0,0,8,8,7,1)}},{oams={oam(0,0,2,2,8,1)}}}}
 local fnanr={animations={
   {loop_start=0,playback_type=2,frames={{cell_id=0,duration=1,scale_x=16384,scale_y=16384}}},
@@ -186,8 +171,6 @@ local wideRef,ww=Composer.renderIndexed(flat,fs.normal,fringe,fnanr,fs.nmcr,0,3)
 T.check(narrow[1]~=nil and wideRef[(0-wide.min_y)*ww+(-1-wide.min_x)+1]~=nil and nw==32,
   "fixture really exposes the fringe column only on the wide canvas")
 
--- Descriptor: LuaWriter output loads in an empty environment, and the inert
--- atlas stub satisfies the 1.0 provider's validation rules.
 local meta=Parts.metadata(model,sprite)
 local chunk=assert(loadstring(LuaWriter.encode(meta)))
 setfenv(chunk,{})
@@ -210,20 +193,19 @@ for _,piece in ipairs(model.pieces) do
   T.check(piece.ax+piece.w<=model.atlasWidth and piece.ay+piece.h<=model.atlasHeight,"piece fits atlas")
   break
 end
--- Pieces are cropped to the union, so the descriptor's offsets stay inside it.
+
 local inside=true
 for _,piece in ipairs(model.pieces) do
   inside=inside and piece.x>=model.min_x and piece.y>=model.min_y
     and piece.x+piece.w<=model.min_x+model.width and piece.y+piece.h<=model.min_y+model.height
 end
 T.check(inside,"every piece lies inside the visible union")
--- Bounds are soft: an over-long track skips part tracks, it does not throw.
+
 local long={graphics=flat,cells=same,nmcr=s5.nmcr,map=0,normal=palette(0),shiny=palette(0),
   nanr={animations={{loop_start=0,playback_type=1,frames={{cell_id=0,duration=70000},{cell_id=0,duration=1}}}}}}
 local none,why=Parts.build(long)
 T.check(none==nil and tostring(why):find("tick bounds",1,true)~=nil,"over-long track returns a reason instead of failing")
--- A frame past the old 240-tick window that the compositor cannot render
--- (canvas over 1024 pixels) skips part tracks instead of throwing.
+
 local huge={cells={{oams={oam(0,0,8,8,5,1)}},{oams={oam(0,0,64,64,5,1)}}}}
 local hs={graphics=flat,cells=huge,nmcr=s5.nmcr,map=0,normal=palette(0),shiny=palette(0),
   nanr={animations={{loop_start=0,playback_type=2,frames={{cell_id=0,duration=300},
@@ -231,7 +213,7 @@ local hs={graphics=flat,cells=huge,nmcr=s5.nmcr,map=0,normal=palette(0),shiny=pa
 local okCall,hm,hwhy=pcall(Parts.build,hs)
 T.check(okCall and hm==nil and tostring(hwhy):find("cannot be composed",1,true)~=nil,
   "uncomposable late frame returns a reason instead of aborting the import")
--- Checkpoints: progress() without arguments is offered outside renders too.
+
 local calls,bare=0,0
 Parts.build(sprite,function(done) calls=calls+1;if done==nil then bare=bare+1 end end)
 T.check(bare>0 and calls>bare,"build offers render and non-render pacing checkpoints")

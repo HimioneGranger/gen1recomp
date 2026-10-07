@@ -1,6 +1,6 @@
 -- Adapted from AnimaEngine v1.0.0, Copyright (c) 2026 KillDaWill, MIT.
 -- See ANIMAENGINE_LICENSE and PROVENANCE.md in this directory.
--- Serialized IDs/offsets are zero-based; Lua arrays are one-based.
+
 local Animation = {}
 local function reader(data)
   assert(type(data) == "string" and #data <= 8 * 1024 * 1024, "invalid Nitro member")
@@ -166,7 +166,7 @@ end
 function Animation.nmar(data)
   local parsed,err=protected(parseBank,data,"RAMN",true)
   if parsed then return parsed end
-  -- Legacy explicit NMAR map tables are accepted; unknown-section heuristics are not.
+
   return protected(function()
     local r=reader(data); local sec=sections(r,"RAMN")
     local section=assert(sec.KNMA or sec.KNAM,err)

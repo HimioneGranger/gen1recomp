@@ -1,4 +1,3 @@
--- Packaging must compile the native bridge rather than ship the old DLL.
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local S = require("tests.harness").suite("UWP picker build routing")
 local function read(path)

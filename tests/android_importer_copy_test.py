@@ -11,7 +11,6 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'mobile/android/love/src/main/java/org/love2d/android/GameActivity.java'
 
-
 def method(text, anchor):
     start = text.index(anchor)
     brace = text.index('{', start)
@@ -22,7 +21,6 @@ def method(text, anchor):
         end += 1
     return text[start:end]
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, default=SOURCE)
@@ -31,8 +29,7 @@ def main():
     parser.add_argument('--work-dir', default=None)
     args = parser.parse_args()
     src = args.source.read_text()
-    # Routing assertions guard against accidentally keeping importer copies on
-    # the UI-thread path or signalling generic copies as required mod imports.
+
     assert 'if (directRequired || isImporterDestination(destName)) {' in src
     worker = src[src.index('if (directRequired ||'):src.index('if (!copyAssetFile(pickedSource')]
     assert 'new Thread(new Runnable()' in worker
@@ -58,15 +55,14 @@ def main():
         'private static void writeFlagFile(',
         'private static PickCopyResult copyRequiredImport(',
     ))
-    # Compile the actual asynchronous production branch, not a test rewrite of
-    # its copy/publish/finally sequence. Android URI routing stays source-gated.
+
     helpers += '\nstatic final PickerTransferGate pickerTransfer = new PickerTransferGate();\n'
     helpers += 'static final String PICK_ERROR_FILENAME="pick_error.flag", PICK_COMPLETE_FILENAME="pick_complete.flag";\n'
     helpers += '''static void startProductionCopy(final InputStream pickedSource,
         final File destFile, final File pickedRoot, final String destName,
         final boolean directRequired) {\n'''
     helpers += method(src, 'if (directRequired || isImporterDestination(destName))')
-    # The production branch hands ownership to the Activity result handler.
+
     helpers = helpers.replace('final boolean directRequired) {\nif',
         'final boolean directRequired) {\nboolean handedOff=false;\nif')
     helpers += '\n}\n'
@@ -198,7 +194,6 @@ def main():
         (work/'PickerCopyFixture.java').write_text(code)
         subprocess.run([args.javac,'-encoding','UTF-8',str(work/'PickerCopyFixture.java')],check=True)
         subprocess.run([args.java,'-cp',str(work),'PickerCopyFixture',str(work/'fixtures')],check=True)
-
 
 if __name__ == '__main__':
     main()

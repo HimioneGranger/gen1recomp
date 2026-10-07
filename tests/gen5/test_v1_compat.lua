@@ -1,4 +1,3 @@
--- Existing v1 example, driven through the real SDK with procedural base data.
 package.path='./?.lua;./?/init.lua;'..package.path
 local T=require('tests.modkit')
 local function fixture()

@@ -1,4 +1,3 @@
--- Synthetic binary fixtures and pixel patterns only; no cartridge assets.
 local Animation=require("src.import.gen5.Animation")
 local Composer=require("src.import.gen5.Composer")
 local function eq(a,b) assert(a==b,tostring(a).." ~= "..tostring(b)) end
@@ -60,13 +59,13 @@ bounds=Composer.bounds(cells,bank,maps,0,0)
 eq(bounds.min_x,2)
 local union=Composer.unionBounds(cells,bank,maps,0,{0,2})
 eq(union.min_x,-2);eq(union.max_x,10)
--- Same-priority serialized-first OAM wins, matching DS/reference ordering.
+
 cell.oams[2]={x=0,y=0,width=8,height=8,tile_index=1,palette=0,priority=0}
 function graphics:getPixel(tile,x,y) return x==0 and y==0 and tile+1 or 0 end
 palette.colors[3]={r=0,g=255,b=0,a=255}
 pixels=Composer.renderIndexed(graphics,palette,cells,bank,maps,0,0)
 eq(pixels[1],1)
--- Parent scaling/translation expands the bounds predictably.
+
 bounds=Composer.bounds(cells,bank,maps,0,0,{scale_x=8192,scale_y=4096,translate_x=10})
 eq(bounds.min_x,14);eq(bounds.max_x,30)
 print("Gen5 animation/compositor synthetic tests passed")

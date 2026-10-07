@@ -1,18 +1,3 @@
--- Independent part tracks for long Black/White idle animations.
---
--- The flattened atlas export bakes the least common multiple of every part's
--- loop. Some sprites need hundreds of thousands of ticks for that, so this
--- module keeps each multicell record as its own track instead: per-record
--- tick->state runs (intro, then loop), each state's cell/transform rendered
--- once per OAM priority group, and the canvas clip each state contributes.
--- A consumer composes the current states with the same global order as
--- Composer.objects: priority descending, then insertion index descending.
--- Insertion index is (record, OAM) lexicographic, so painting priority groups
--- high to low, and records last to first inside each group, is exact.
---
--- Rendering reuses Composer.renderIndexed on a one-record, one-frame view, so
--- the transform, rounding, flip, tile and palette-index rules are the
--- compositor's own. No pixels are stored in this file or the repository.
 local Animation=require("src.import.gen5.Animation")
 local Composer=require("src.import.gen5.Composer")
 local Parts={FORMAT="gen5-parts",VERSION=1,ATLAS_WIDTH=256,ROW=64,MAX_TRACKS=512,
@@ -23,8 +8,7 @@ local function range(animation,first,last,step)
   for i=first,last,step do total=total+animation.frames[i].duration end
   return total
 end
--- Mirrors Animation.frame's wrap rules exactly. The result satisfies
--- frame(t) == frame(t < intro and t or intro + (t - intro) % period).
+
 function Parts.cycle(animation)
   local n=#animation.frames
   local duration=range(animation,1,n,1)
@@ -54,7 +38,6 @@ local function stateKey(frame)
 end
 local function enabled(oam) return not (oam.disabled==true or oam.disabled==1) end
 
--- One record frozen at one frame: a single-record map and single-frame bank.
 local function view(record,frame)
   local still={}
   for key,value in pairs(frame) do still[key]=value end
@@ -66,11 +49,6 @@ local function view(record,frame)
     {maps={{records={placed}}}}
 end
 
--- Builds the track model and indexed pieces for the sprite's idle map.
--- progress(done,count) is called after each rendered state, and progress()
--- at other checkpoints, for job pacing. Exceeding a part-track bound returns
--- nil and a reason: the caller then keeps the capped atlas's native fallback
--- for this variant instead of failing the whole import.
 function Parts.build(sprite,progress)
   local map=assert(sprite.nmcr.maps[sprite.map+1],"missing idle multicell map")
   if #map.records<1 or #map.records>Parts.MAX_TRACKS then return nil,"part track count exceeds bounds" end
@@ -125,10 +103,7 @@ function Parts.build(sprite,progress)
       end
     end
     if any then
-      -- Composer's per-tick canvas is floor/ceil of every enabled item.
-      -- Composer asserts (singular transform, oversized canvas) can reach a
-      -- frame the 240-tick atlas never rendered; skip parts rather than fail
-      -- the import. These calls never yield, so pcall is safe here.
+
       local okB,b=pcall(Composer.bounds,sprite.cells,nanr,nmcr,0,0)
       if not okB then return nil,"part state cannot be composed: "..tostring(b) end
       state.bounds={b.min_x,b.min_y,b.max_x,b.max_y}
@@ -141,8 +116,7 @@ function Parts.build(sprite,progress)
         if list then
           local cells={cells={[frame.cell_id+1]={oams=list}}}
           local pb=Composer.bounds(cells,nanr,nmcr,0,0)
-          -- Items paint one pixel past their floor/ceil box; keep that fringe
-          -- here and let the consumer clip it to the per-tick canvas.
+
           local okR,pixels,width,_,origin=pcall(Composer.renderIndexed,sprite.graphics,sprite.normal,cells,nanr,nmcr,0,0,
             {bounds={min_x=pb.min_x-1,min_y=pb.min_y-1,max_x=pb.max_x+2,max_y=pb.max_y+2}})
           if not okR then return nil,"part piece cannot be composed: "..tostring(pixels) end
@@ -174,7 +148,7 @@ function Parts.build(sprite,progress)
     if progress then progress(done,#work) end
   end
   assert(hull,"idle animation has no enabled objects")
-  -- Visible union: every piece pixel that any per-tick canvas could show.
+
   local minx,miny,maxx,maxy=math.huge,math.huge,-math.huge,-math.huge
   for i,piece in ipairs(pieces) do
     local values=data[i]
@@ -194,9 +168,7 @@ function Parts.build(sprite,progress)
   end
   assert(minx<maxx and miny<maxy,"idle animation has no visible pixels")
   if maxx-minx>256 or maxy-miny>256 then return nil,"sprite frame exceeds pack bounds" end
-  -- Crop pieces to the union. Outside it a pixel is transparent in every
-  -- piece or lies outside every per-tick canvas, so cropping is lossless and
-  -- keeps every piece inside the union.
+
   local remap,kept,keptData={}, {}, {}
   for i,piece in ipairs(pieces) do
     local values=data[i]
@@ -234,7 +206,6 @@ function Parts.build(sprite,progress)
     width=maxx-minx,height=maxy-miny,hull=hull}
 end
 
--- Shelf-packs pieces into a 256-wide atlas whose height is a multiple of 64.
 function Parts.layout(model)
   local order={}
   for i in ipairs(model.pieces) do order[i]=i end
@@ -256,8 +227,6 @@ function Parts.layout(model)
   return model
 end
 
--- Pure reference compositor: sparse palette indices in union coordinates,
--- keyed y*width+x+1, exactly what Composer.renderIndexed shows at tick.
 function Parts.composeIndexed(model,tick)
   local states={}
   local cx0,cy0,cx1,cy1=math.huge,math.huge,-math.huge,-math.huge
@@ -302,7 +271,7 @@ local function flatPalette(palette)
   end
   return out
 end
--- Serializable descriptor. Coordinates are relative to the union canvas.
+
 function Parts.metadata(model,sprite)
   local tracks={}
   for r,track in ipairs(model.tracks) do
@@ -329,8 +298,6 @@ function Parts.metadata(model,sprite)
     tracks=tracks,pieces=pieces,palettes={normal=flatPalette(sprite.normal),shiny=flatPalette(sprite.shiny)}}
 end
 
--- Palette-index atlas: red holds the index, alpha 255 marks an opaque pixel.
--- One image serves both normal and shiny palettes.
 function Parts.image(model,checkpoint)
   assert(love and love.image,"LÖVE image module required for sprite import")
   local image=love.image.newImageData(model.atlasWidth,model.atlasHeight)
@@ -346,7 +313,7 @@ function Parts.image(model,checkpoint)
   end
   return image
 end
--- Inert atlas descriptor so 1.0.x consumers validate and then skip this entry.
+
 function Parts.stub(model)
   local frames=model.atlasHeight/Parts.ROW
   local durations={}

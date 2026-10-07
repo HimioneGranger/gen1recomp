@@ -1,4 +1,3 @@
--- Bounded zero-based readers for Nintendo DS / Nitro containers.
 local Binary = {}
 function Binary.reader(data)
   assert(type(data) == "string", "binary data must be a string")

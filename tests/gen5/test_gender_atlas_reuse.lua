@@ -1,5 +1,3 @@
--- ROM-free job regression: missing female graphics must alias male assets,
--- while actual female art still gets composed/encoded and published separately.
 for _,name in ipairs({'Nds','Narc','Lz','Graphics','Cells','Animation','Composer','Parts'}) do
   package.loaded['src.import.gen5.'..name]={}
 end
@@ -13,7 +11,7 @@ love={image={}}
 local Bw=require('src.import.gen5.BwImport')
 assert(Bw.EXPORT_VERSION=='1.1.0')
 local archive={member=function(index)
-  -- Dex25 has distinct front female art; dex252 has none on either side.
+
   return index==25*20+3 and 'female art' or ''
 end}
 Bw.identify=function() return {md5='fixture'},archive end
@@ -34,7 +32,7 @@ Bw.image=function(poses,palette)
       return {getString=function()return palette end,release=function()end}
     end}, {cycleCapped=poses.cycleCapped,frames=1,tickRate=60,durations={1}}
 end
--- Capped graphics also publish one shared part-track entry for both palettes.
+
 Bw.parts=function(sprite,progress)
   partsBuilt[#partsBuilt+1]=sprite.key
   progress(1,1)
@@ -93,8 +91,6 @@ count=0;for _ in pairs(published.entries) do count=count+1 end
 assert(count==5194 and published.entries['shiny/649/back/female'])
 print('PASS complete 649-species logical entry coverage with fallback alias optimization')
 
--- A part-track bound failure skips only that variant's parts: the capped
--- atlas remains (native fallback) and the import still completes.
 writes,published,encoded,read,composed,partsBuilt=0,nil,0,{},{},{}
 Bw.parts=function(sprite) partsBuilt[#partsBuilt+1]=sprite.key;return nil,'part track exceeds tick bounds' end
 local skipped=Bw.job('no ROM',{}, {species={25,252}})

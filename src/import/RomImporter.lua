@@ -33,8 +33,8 @@ local function pickFile(...)
   return fn(...) and true or false
 end
 
--- A staged importer pick owns its inbox and pending identity until publication
--- or failure. Refocus and unrelated launcher actions must not replace it.
+
+
 function RomImporter:_importerPickPending()
   return self.android and self.pickerPendingKind == "importer"
 end
@@ -1841,7 +1841,7 @@ function RomImporter:focus(f)
   if pickError and self:_importerPickPending() then
     local destination = pickError:gsub("^cancelled:", "")
     if destination ~= importerPickName(self.pickerPendingImporterId) then
-      -- A previous request's failure does not retire this transfer.
+
       pickError = nil
     end
   end
@@ -1896,8 +1896,8 @@ function RomImporter:focus(f)
     return
   end
 
-  -- While an importer dump is still copying, unrelated ROMs/dependencies in
-  -- the save directory cannot complete or replace its request.
+
+
   if self:_importerPickPending() and not findPendingImporter(self) then return end
 
   -- Current mobile bridge: the native picker has already streamed a raw
@@ -3505,8 +3505,8 @@ function RomImporter:_pollPickedFiles(dt)
     end
   end
   if found then
-    -- An importer request is retired by focus only after consuming its own
-    -- published dump or failure. A refocus by itself is not completion.
+
+
     if not importerPending then self.pickPending = nil end
     self:focus(true)
   end
@@ -4682,8 +4682,8 @@ function RomImporter:_stepImporter()
       job.progress = value.done / value.total
       job.status = value.status or job.status
     end
-    -- Spend available launcher time instead of waiting a frame after every
-    -- small yield. Stop between slices so the UI keeps receiving updates.
+
+
     if deadline and clock() >= deadline then break end
   end
 end

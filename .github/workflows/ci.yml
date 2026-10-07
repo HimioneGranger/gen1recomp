@@ -247,9 +247,9 @@ jobs:
         with:
           name: gen1recomp-xbox-uwp-payload
           path: .bazinga/work
-      # Rebuild the pinned native picker bridge before packaging; the vendored
-      # DLL predates descriptor-specific ROM filters. Keep the committed ANGLE
-      # runtime while rebuilding SDL2, LÖVE, LuaJIT and their vcpkg dependencies.
+
+
+
       - name: Rebuild Xbox UWP picker dependencies
         shell: pwsh
         run: ./scripts/xbox-uwp/rebuild_dependencies.ps1 -SkipAngle -SkipPackage

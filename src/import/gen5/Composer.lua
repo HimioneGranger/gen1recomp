@@ -81,7 +81,7 @@ function Composer.unionBounds(cells,nanr,nmcr,mapIndex,ticks,parent)
   end
   return out
 end
--- Symmetric nearest-neighbor rounding; fixes the reference's negative floor bias.
+
 local function round(value)
   return value>=0 and math.floor(value+0.5) or math.ceil(value-0.5)
 end

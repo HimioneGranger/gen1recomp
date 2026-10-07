@@ -84,8 +84,8 @@ check(required.requiredPath.modId == "needs-source"
 check(removedPath == [[C:\LocalState\picked_required_import.bin]],
   "UWP removes its temporary required-import copy after validation")
 
--- Importer descriptors, rather than the launcher's GB/GBA defaults, select
--- the native ROM filter. The source bytes are validated by the importer.
+
+
 local pickedFormats
 love.system.pickFile = function(kind, formats)
   pickedKind, pickedFormats = kind, formats

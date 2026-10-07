@@ -1,4 +1,3 @@
--- Engine-owned Black/White battle-sprite pack importer. No external executable.
 local Nds=require("src.import.gen5.Nds")
 local Narc=require("src.import.gen5.Narc")
 local Lz=require("src.import.gen5.Lz")
@@ -52,14 +51,13 @@ function Bw.readPokemon(archive,dex,side,female)
 end
 local function gcd(a,b) while b~=0 do a,b=b,a%b end;return a end
 local function timeline(sprite)
-  -- NMAR chooses the idle map. The export is the looping idle pose, without
-  -- mixing its separate wait/break maps into the same battle animation.
+
   local period,intro=1,0
   do
     local map=assert(sprite.nmcr.maps[sprite.map+1],"missing idle multicell map")
     for _,record in ipairs(map.records) do
       local p,i=Animation.period(sprite.nanr,record.animation_index)
-      -- A single fixed pose contributes no changing state to the loop LCM.
+
       if #sprite.nanr.animations[record.animation_index+1].frames==1 then p,i=1,0 end
       intro=math.max(intro,i)
       period=math.min(Bw.MAX_TICKS+1,period/gcd(period,p)*p)
@@ -70,8 +68,6 @@ local function timeline(sprite)
   return math.min(total,Bw.MAX_TICKS),intro,total>Bw.MAX_TICKS
 end
 
--- Keep sparse palette-index frames until the opaque union is known. Adjacent
--- equal timeline poses share a frame and retain exact 60 Hz duration metadata.
 function Bw.poses(sprite,progress)
   local ticks,intro,capped=timeline(sprite)
   local frames,durations,last,loopStart={}, {}, nil,0
@@ -122,9 +118,7 @@ function Bw.image(poses,palette)
     tickRate=60,durations=poses.durations,loopStartFrame=poses.loopStartFrame,
     cycleTicks=poses.ticks,cycleCapped=poses.cycleCapped,anchorX=-poses.min_x,anchorY=-poses.min_y}
 end
--- Complete long animations without a global loop: see Parts.lua.
--- Both return nil and a reason when a part-track bound is exceeded; the
--- variant then keeps its capped atlas and native fallback.
+
 function Bw.parts(sprite,progress)
   local model,why=Parts.build(sprite,progress)
   if not model then return nil,why end
@@ -152,30 +146,25 @@ function Bw.job(rom,fs,options)
     for _,dex in ipairs(species) do
       for _,side in ipairs({"front","back"}) do
         for _,female in ipairs({false,true}) do
-          -- An empty female graphics member uses exactly the male graphics,
-          -- cells, animation and palettes. Preserve its logical IDs while
-          -- reusing the already published male atlas instead of rebuilding it.
+
           local genderFallback=female and #archive.member(dex*20+(side=="front" and 3 or 12))==0
           local sprite=not genderFallback and Bw.readPokemon(archive,dex,side,female) or nil
           local clock=love and love.timer and love.timer.getTime
           local sliceStart=clock and clock() or 0
           local poses=not genderFallback and Bw.poses(sprite,function(done,count)
-            -- Avoid one launcher frame per source tick. Keep each slice at
-            -- most eight ticks, with a 4 ms soft limit between compositions.
+
             if done%8==0 or done==count or (clock and clock()-sliceStart>=0.004) then
               coroutine.yield({done=completed+done/count*0.5,total=total,
                 status=("Assembling %03d %s"):format(dex,side)})
               if clock then sliceStart=clock() end
             end
           end)
-          -- The capped atlas stays as before for 1.0.x consumers. Its complete
-          -- animation is published separately as independent part tracks.
+
           local partsId
           if poses and poses.cycleCapped then
             local id=("parts/%03d/%s%s"):format(dex,side,female and "/female" or "")
             sliceStart=clock and clock() or 0
-            -- Renders yield every eight states; other checkpoints (done=nil)
-            -- yield on the 4 ms soft limit only.
+
             local function pace(done,count)
               if (done and (done%8==0 or done==count)) or (clock and clock()-sliceStart>=0.004) then
                 coroutine.yield({done=completed+0.5,total=total,
@@ -195,7 +184,7 @@ function Bw.job(rom,fs,options)
                 frames=stub.frames,sprite=stub,metadata={file=base..".lua",size=metaSize}}
               partsId,parts=id,parts+1
             else partsSkipped[#partsSkipped+1]=id..": "..tostring(why) end
-            -- Keep part publication and the atlas encodes in separate slices.
+
             coroutine.yield({done=completed+0.5,total=total,status=("Published %03d %s parts"):format(dex,side)})
           end
           for _,palette in ipairs({"normal","shiny"}) do
@@ -212,8 +201,7 @@ function Bw.job(rom,fs,options)
               local width,height=image:getDimensions()
               local ok,encoded=pcall(image.encode,image,"png");image:release();assert(ok,encoded)
               local bytes=encoded:getString();if encoded.release then encoded:release() end
-              -- Content paths include source+export version. An interrupted new
-              -- import cannot overwrite another source/version's published pack.
+
               local file=source.md5.."/"..Bw.EXPORT_VERSION.."/"..id..".png"
               local size,err=Importers.writeAsset(Bw.IMPORTER,"battle_sprites",file,bytes,fs);assert(size,err)
               entries[id]={file=file,size=size,width=width,height=height,frames=#poses.frames,sprite=metadata}

@@ -1,4 +1,3 @@
--- Atomic native picker publication through the actual launcher polling path.
 package.path='./?.lua;./?/init.lua;'..package.path
 local T=require('tests.modkit')
 local RomImporter=require('src.import.RomImporter')

@@ -1,4 +1,3 @@
--- ROM-free bounded NCGR/NCLR/NCER parser tests, run from the engine root.
 package.path="./?.lua;./?/init.lua;"..package.path
 local G=require("src.import.gen5.Graphics")
 local C=require("src.import.gen5.Cells")

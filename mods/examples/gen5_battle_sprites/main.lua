@@ -1,4 +1,3 @@
--- Native asset-pack example. All sprite pixels come from the player's cache.
 local mod = ...
 local MAX_IMAGE = 8 * 1024 * 1024
 local clock, reason, ready, warned = 0, "Gen 5 sprite pack is not installed", false, false
@@ -44,8 +43,7 @@ local function loadIndex()
     end
     if s.cycleTicks ~= nil and s.cycleTicks ~= total then error("animation cycle length mismatch", 0) end
     if s.kind == "parts" then
-      -- Exporter 1.1 part tracks. Their inert atlas descriptor is capped, so
-      -- 1.0 consumers skip them; the tracks live in the entry's metadata.
+
       if s.cycleCapped == true and type(raw.metadata) == "table" then
         partEntries[raw.id] = {size = raw.size, atlasWidth = raw.width, atlasHeight = raw.height}
       end
@@ -58,8 +56,7 @@ local function loadIndex()
       composite[#composite + 1] = {id = raw.id, parts = s.partsEntry, palette = s.partsPalette}
     end
   end
-  -- A capped entry plays complete only through its part tracks; otherwise it
-  -- keeps native artwork exactly as before.
+
   for _, item in ipairs(composite) do
     if partEntries[item.parts] then entries[item.id] = {parts = item.parts, palette = item.palette} end
   end
@@ -78,8 +75,7 @@ end
 local function decodePng(id, size, aw, ah)
   local bytes, err = mod.packs:read("gen5_bw", "battle_sprites", id)
   if type(bytes) ~= "string" or #bytes ~= size or #bytes > MAX_IMAGE then error(err or "invalid pack image length", 0) end
-  -- IHDR is checked before decoding: a tiny compressed PNG must not allocate
-  -- an arbitrary-size image. Atlas dimensions come from validated metadata.
+
   if bytes:sub(1, 8) ~= "\137PNG\13\10\26\10" or bytes:sub(13,16) ~= "IHDR" then error("invalid PNG", 0) end
   local function be(pos)
     local a,b,c,d = bytes:byte(pos, pos + 3)
@@ -128,10 +124,6 @@ local function imageFor(id, entry, frame)
   return remember(key, image)
 end
 
--- Part-track composition (exporter 1.1). Each track keeps its own intro and
--- loop on the shared 60 Hz tick, so no global loop is ever baked. Pieces are
--- painted in the source compositor's global order: OAM priority high to low,
--- then multicell record last to first, clipped to that tick's canvas.
 local TRANSPARENT = "\0\0\0\0"
 local function list(value, lo, hi, multiple)
   if type(value) ~= "table" or #value < lo or #value > hi or #value % multiple ~= 0 then
@@ -152,8 +144,7 @@ local function paletteBytes(values)
   end
   return out
 end
--- A plan holds the tracks, piece rectangles and palettes. It
--- is small, so many stay cached; a composite-cache hit needs only the plan.
+
 local function loadPlan(partsId)
   local pe = partEntries[partsId]
   if not pe then error("missing part tracks", 0) end
@@ -176,7 +167,7 @@ local function loadPlan(partsId)
         and integer(ax, 0, pe.atlasWidth - w) and integer(ay, 0, pe.atlasHeight - h)) then
       error("invalid part piece", 0)
     end
-    -- Pieces are packed without overlap, so their area never exceeds the atlas.
+
     area = area + w * h
     if area > pe.atlasWidth * pe.atlasHeight then error("part pieces exceed atlas", 0) end
     pieces[i] = {index = i, x = x, y = y, w = w, h = h, ax = ax, ay = ay}
@@ -221,16 +212,14 @@ local function loadPlan(partsId)
     if n ~= span then error("part run length mismatch", 0) end
     tracks[r] = {intro = t.intro, period = t.period, at = at}
   end
-  -- The animation-union canvas is fixed across poses, with one output
-  -- pixel for every source pixel and all transparent margins preserved.
+
   local strings = {}
   for i = 1, W * H do strings[i] = TRANSPARENT end
   return {width = W, height = H, tracks = tracks, pieces = pieces,
     out = {}, strings = strings, states = {}, key = {},
     palettes = {normal = paletteBytes(meta.palettes.normal), shiny = paletteBytes(meta.palettes.shiny)}}
 end
--- Palette indices per piece, unpacked from the index atlas (red = index,
--- alpha 0 = transparent). Only needed when a new state combination appears.
+
 local function loadPixels(partsId, plan)
   local pe = partEntries[partsId]
   local data = decodePng(partsId, pe.size, pe.atlasWidth, pe.atlasHeight)
@@ -272,7 +261,7 @@ local function pixelsFor(partsId, plan)
   data, pixelCount = cached(pixelSets, 6, pixelCount, partsId, function() return loadPixels(partsId, plan) end)
   return data
 end
--- The state of every track at one tick, and a key naming that combination.
+
 local function selectStates(plan, tick)
   local states, key = plan.states, plan.key
   for r, track in ipairs(plan.tracks) do
@@ -324,8 +313,7 @@ local function compose(plan, states, colors, data)
   for i = 1, W * H do strings[i] = colors[out[i]] or TRANSPARENT end
   return table.concat(strings)
 end
--- Composed frames are cached by the exact state combination, separately from
--- atlas frames. Ticks that change no track state reuse the same image.
+
 local function compositeFor(id, entry, tick)
   local plan = planFor(entry.parts)
   local states, signature = selectStates(plan, tick)
@@ -356,7 +344,7 @@ end
 
 mod.exports.api = 2
 mod.exports.apiVersion = 2
--- Art generation is independent of the receiving game or voxel engine.
+
 mod.exports.capabilities = {
   contract = "national-dex-battle-sprites", version = 2,
   source = "gen5_bw", maxDex = 649, sides = {"front", "back"},
@@ -368,7 +356,7 @@ function mod.exports.status()
   return {ready = ready, reason = reason, cachedImages = imageCount, cachedAtlases = atlasCount,
     cachedComposites = compositeCount, cachedPartPlans = planCount, cachedPartPixels = pixelCount}
 end
--- Advanced by input.step once per simulation update; never by eye draws.
+
 function mod.exports.update(dt)
   if type(dt) == "number" and dt == dt and dt >= 0 and dt < math.huge then clock = clock + dt * 1000 end
 end
@@ -389,15 +377,14 @@ function mod.exports.frame(request)
     if count >= 16 then slots = {} end
     slot = {id = id, mon = request.mon, started = clock}; slots[slotKey] = slot
   end
-  -- Keep identity storage bounded across battles, without advancing animation.
+
   if not slot.touched or clock - slot.touched > 60000 then
     for key, value in pairs(slots) do if clock - (value.touched or value.started) > 60000 then slots[key] = nil end end
   end
   slot.touched = clock
   local elapsed = math.floor((clock - slot.started) * 60 / 1000 + 1e-7)
   if entry.parts then
-    -- Complete animation: every part follows its own loop on the shared tick.
-    -- frame is the 1-based 60 Hz tick shown, not an atlas index.
+
     if slot.partTick == elapsed and composites[slot.partKey] then
       local hit = composites[slot.partKey]
       serial = serial + 1; hit.used = serial

@@ -3,7 +3,6 @@
 local Graphics = {}
 local MAX_BYTES = 8 * 1024 * 1024
 
--- Zero-based bounded reader, kept local to these format parsers.
 function Graphics.reader(data)
   assert(type(data) == "string" and #data <= MAX_BYTES, "Gen 5 entry must be a bounded byte string")
   local r = {size = #data}
@@ -48,7 +47,7 @@ function Graphics.parseGraphics(data)
   assert(length>0 and length<=size-0x20 and length%bytesPerTile==0,"invalid NCGR tile data length")
   local pixels=r:sub(section+0x20,length)
   local count=length/bytesPerTile
-  -- Gen V linear 4bpp files use a 32-tile stride regardless of header width.
+
   local linear=kind==1 and bpp==4
   local object={bpp=bpp,tile_count=count,tileCount=count,width_tiles=linear and 32 or width,
     height_tiles=height,character_type=kind,tile_data_size=length}

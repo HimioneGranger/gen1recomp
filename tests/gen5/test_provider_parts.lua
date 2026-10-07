@@ -1,5 +1,3 @@
--- Provider 2.0 part-track playback through the real ModSDK loader. Lives with
--- the engine tests because it builds procedural fixtures with engine modules.
 package.path="./?.lua;./?/init.lua;"..package.path
 local T=require("tests.modkit")
 local path="mods/examples/gen5_battle_sprites"
@@ -26,8 +24,7 @@ end
 local oldImage,oldNewImage,oldFileData=love.image.newImageData,love.graphics.newImage,love.filesystem.newFileData
 love.filesystem.newFileData=function(bytes)return bytes end
 local files
--- Exporter 1.1 part tracks: a procedural sprite wider than 64 pixels whose
--- tracks have different intros and loops. All original pixels must survive.
+
 local Parts=require("src.import.gen5.Parts")
 local LuaWriter=require("src.import.LuaWriter")
 local graphics={bpp=4}
@@ -69,7 +66,7 @@ local partsPng=string.char(137).."PNG"..string.char(13,10,26,10)..u32(13).."IHDR
 local partsPack={format=1,importer="gen5_bw",pack="battle_sprites",kind="sprite",version="1.1.0",
   source={name="Procedural test fixture",md5=string.rep("0",32),size=0},entries={}}
 partsPack.entries["normal/025/front"]=entry()
--- A large atlas fixture must keep every source pixel in native mode.
+
 local largePng=string.char(137).."PNG"..string.char(13,10,26,10)..u32(13).."IHDR"..u32(90)..u32(85)
 partsPack.entries["normal/384/front"]={file="large.png",size=#largePng,width=90,height=85,
   sprite={width=90,height=85,columns=1,frames=1,tickRate=60,durations={12}}}
@@ -84,8 +81,7 @@ partsPack.entries["normal/031/front"]=broken
 local badMeta="return {format='gen5-parts',version=99}"
 partsPack.entries["parts/031/front"]={file="parts.png",size=#partsPng,width=stub.width,height=stub.height*stub.frames,
   frames=stub.frames,sprite=stub,metadata={file="bad.lua",size=#badMeta}}
--- Unscaled fixture: a 4x affine object paints one column past its own box,
--- shown only on ticks where another track widens the canvas.
+
 local flat={bpp=4}
 function flat:getPixel(tile) return tile+1 end
 local fringeSprite={graphics=flat,map=0,normal=palette(0),shiny=palette(5),
@@ -207,8 +203,7 @@ T.check(pe.frame({dex=25,side="front"})~=nil,"atlas entries still play next to p
 local st=pe.status()
 T.check(st.cachedImages<=8 and st.cachedComposites<=16 and st.cachedPartPlans<=16 and st.cachedPartPixels<=6,
   "bounded image, composite, plan and pixel caches")
--- Seven distinct part entries in rotation: once composed, stereo repeats and
--- unchanged ticks must not decode or reload anything.
+
 local rotation={}
 for i=40,46 do
   local pid=("parts/%03d/front"):format(i)
@@ -220,7 +215,7 @@ local afterFirst=partDecodes
 for _,req in ipairs(rotation) do pe.frame(req) end
 T.eq(partDecodes,afterFirst,"repeated calls at the same tick reuse composites without decoding")
 T.check(afterFirst-decodesBefore<=7,"each rotation sprite decodes at most once to compose")
--- Native resolution is the only output contract; no 64x64 resampling path.
+
 T.check(pe.capabilities.nativeResolution==true,"provider advertises native resolution")
 local function nativeExpected(tick,name)
   local idx=Parts.composeIndexed(model,tick)

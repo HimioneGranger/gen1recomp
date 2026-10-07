@@ -143,8 +143,8 @@ public class GameActivity extends SDLActivity {
     private String pendingPickFilename = PICKED_ROM_FILENAME;
     private static final String STATE_PENDING_PICK = "pendingPickFilename";
     private static final String STATE_PENDING_PICK_ACTIVE = "pendingPickActive";
-    // Process-wide: an Activity recreation must not open another picker while
-    // the old Activity's worker still owns a shared .part/final destination.
+
+
     private static final PickerTransferGate pickerTransfer = new PickerTransferGate();
     // Absolute save directory physfs actually mounted, as reported by the
     // native bridge call that opened the picker (love/src/common/android.cpp,
@@ -668,8 +668,8 @@ public class GameActivity extends SDLActivity {
             return true;
         }
         synchronized void restorePicker() {
-            // Only reconstruct a picker after process death. An old Activity's
-            // saved PICKING state must not re-arm a completed live-process job.
+
+
             if (!initialized) {
                 state = PICKING;
                 initialized = true;
@@ -708,13 +708,13 @@ public class GameActivity extends SDLActivity {
             if (destFilename == null || destFilename.length() == 0) {
                 destFilename = PICKED_ROM_FILENAME;
             }
-            // Remember where LOVE's filesystem is really mounted so
-            // onActivityResult copies the pick there, not into a recomputed
-            // (possibly different-volume) root (#604, #839).
+
+
+
             self.pendingPickSaveDir = (saveDir != null) ? saveDir : "";
-            // Basename destinations keep the historical ROM/mod/save staging path.
-            // A nested destination is accepted only for an engine-generated mod
-            // baseroms path, then canonicalized beneath LOVE's mounted save root.
+
+
+
             String normalizedDest = destFilename.replace('\\', '/');
             boolean nested = normalizedDest.indexOf('/') >= 0;
             if (nested && !isDirectRequiredDestination(normalizedDest)) {
@@ -740,18 +740,18 @@ public class GameActivity extends SDLActivity {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
-                // The Storage Access Framework grants the returned content URI
-                // directly to this activity. Request the read grant explicitly as
-                // well: Android 13's scoped storage deliberately does not expose
-                // arbitrary paths or require broad media/storage permissions.
+
+
+
+
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 try {
                     self.startActivityForResult(intent, FILE_PICKER_REQUEST_CODE);
                     opened = true;
                     return true;
                 } catch (Exception e) {
-                    // Some OEM / TV builds ship without DocumentsUI; fall through
-                    // to the GET_CONTENT chooser below instead of giving up (#584).
+
+
                     Log.d("GameActivity", "could not open document picker: " + e.getMessage());
                 }
             }
@@ -1835,12 +1835,12 @@ public class GameActivity extends SDLActivity {
                 return;
             }
 
-            // ACTION_OPEN_DOCUMENT is meant to land in the system documents UI, but
-            // some OEM shells (ColorOS) offer third-party file managers in a
-            // chooser, and those hand back either a provider URI this app has no
-            // grant for (SecurityException / FileNotFoundException) or a bare
-            // file:// path (unreadable without storage permission on targetSdk 34).
-            // Try the resolver, then the path, then tell Lua why nothing imported.
+
+
+
+
+
+
             InputStream source = null;
             try {
                 source = getContentResolver().openInputStream(uri);
@@ -1862,8 +1862,8 @@ public class GameActivity extends SDLActivity {
             final InputStream pickedSource = source;
             final File pickedRoot = destDir;
             if (directRequired || isImporterDestination(destName)) {
-                // Large importer sources must not block Android's UI thread. The
-                // final basename appears only when the complete copy is published.
+
+
                 if (!pickerTransfer.beginCopy()) {
                     try { pickedSource.close(); } catch (IOException ignored) {}
                     return;
