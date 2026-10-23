@@ -56,7 +56,7 @@
           android:resource="@xml/full_update_paths" />
     </provider>
     <activity
-        android:name="org.love2d.android.GameActivity"
+        android:name="${ACTIVITY}"
         android:exported="true"
         android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection|colorMode"
         android:label="${NAME}"

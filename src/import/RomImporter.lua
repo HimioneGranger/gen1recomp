@@ -1654,6 +1654,8 @@ end
 -- import-only run all skip the release check so headless and CI runs never spin
 -- up the background worker or reach out to the network.
 local function updaterAllowed()
+  -- Generic downloaded payloads do not carry the required Quest display/input bridge.
+  if rawget(_G, "QUEST_PANEL_ACTIVE") == true then return false end
   if not Platform.networkValidated() then return false end
   local isHandheld = os.getenv("HANDHELD") == "1" or os.getenv("PORTMASTER") == "1"
     or os.getenv("POKEPORT_HANDHELD") == "1" or os.getenv("TRIMUI") == "1"

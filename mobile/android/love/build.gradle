@@ -80,6 +80,19 @@ android {
         embed {
             dimension 'mode'
         }
+        questVr {
+            dimension 'mode'
+            minSdk 24
+            matchingFallbacks = ['embed']
+            ndk { abiFilters 'arm64-v8a' }
+            externalNativeBuild {
+                ndkBuild {
+                    arguments 'QUEST_XR=1',
+                        "QUEST_OPENXR_INCLUDE=${layout.buildDirectory.get()}/quest-openxr/prefab/modules/headers/include"
+                }
+            }
+        }
+
     }
     sourceSets {
         main {
@@ -90,9 +103,11 @@ android {
             }
         }
         normal {
-            java {
-                srcDirs += 'src/normal/java'
-            }
+            java { srcDirs += 'src/normal/java' }
+        }
+        questVr {
+            java { srcDirs += 'src/questVr/java' }
+            res.srcDirs = ['src/embed/res']
         }
     }
     externalNativeBuild {
@@ -118,4 +133,32 @@ android {
 dependencies {
     api fileTree(dir: 'libs', include: ['*.jar'])
     api 'androidx.appcompat:appcompat:1.6.1'
+}
+
+// Resolve public headers only for the optional Quest flavor; nothing is vendored.
+configurations { questOpenXRHeaders }
+dependencies { questOpenXRHeaders 'org.khronos.openxr:openxr_loader_for_android:1.1.60@aar' }
+tasks.register('prepareQuestOpenXRHeaders', Copy) {
+    doFirst {
+        def archive = configurations.questOpenXRHeaders.singleFile
+        def hash = java.security.MessageDigest.getInstance('SHA-256').digest(archive.bytes).encodeHex().toString()
+        if (hash != '9a21ecea6b308d3a7fcf261412bec4cb1ae9148ba053d6b24da468fef96029c7') {
+            throw new GradleException('OpenXR loader AAR checksum changed; review the pinned dependency before building')
+        }
+    }
+    from { zipTree(configurations.questOpenXRHeaders.singleFile) }
+    include 'prefab/modules/headers/include/**'
+    into layout.buildDirectory.dir('quest-openxr')
+}
+tasks.configureEach { task ->
+    if (task.name.toLowerCase().contains('questvr') &&
+        (task.name.startsWith('configureNdkBuild') || task.name.startsWith('buildNdkBuild'))) {
+        task.dependsOn tasks.named('prepareQuestOpenXRHeaders')
+    }
+}
+// Gradle merges ABI filters as a union; the Quest runtime is ARM64 only.
+androidComponents {
+    onVariants(selector().withFlavor('mode', 'questVr')) { variant ->
+        variant.externalNativeBuild.abiFilters.set(['arm64-v8a'])
+    }
 }

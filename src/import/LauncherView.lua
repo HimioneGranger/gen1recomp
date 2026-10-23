@@ -3770,10 +3770,12 @@ end
 
 -- ------------------------------------------------------------------ footer
 
-local TRUST_WARNING = "if you did not get this from bryanthaboi's github "
+local TRUST_WARNING = rawget(_G, "QUEST_PANEL_ACTIVE") == true
+  and "Based on the Pokemon Gen 1 Recompilation Project by BOIS CLUB GAMES, LLC (https://github.com/bryanthaboi/gen1recomp)"
+  or ("if you did not get this from bryanthaboi's github "
   .. "or a link from the discord that bryanthaboi himself posted, just know "
   .. "it might have been tampered with. go to the discord to verify "
-  .. COMMUNITY_URL .. " (or click the logo above)"
+  .. COMMUNITY_URL .. " (or click the logo above)")
 
 -- Mark + optional updater + Patch notes.  Chips match the mark's 22px
 -- height so they do not read as bigger than the logo; the row can still

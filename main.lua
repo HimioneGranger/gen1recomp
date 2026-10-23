@@ -874,6 +874,7 @@ local function startLaunchRequest(request)
 end
 
 function love.load(args)
+  HostDisplay.installPackagedBackend()
   if os.getenv("POKEPORT_BACKGROUND") == "1" and love.audio then
     love.audio.setVolume(0)
     love.audio.setVolume = function() end
@@ -901,7 +902,10 @@ function love.load(args)
   -- downloaded payload here.  True means it took over, so we must stop.  A
   -- dev / source checkout no-ops (see src/update/Boot.lua).
   local Boot = require("src.update.Boot")
-  if Boot.run(args) then return end
+  -- Generic payloads do not carry this optional packaged Quest display/input bridge.
+  if rawget(_G, "QUEST_PANEL_ACTIVE") == true then
+    print('[Quest launcher] Using bundled Quest-compatible runtime; generic downloaded payload inactive')
+  elseif Boot.run(args) then return end
 
   local savePath
   for i, a in ipairs(args or {}) do
