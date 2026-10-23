@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Gen1Recomp VR
+Comment=Add the original launcher to Steam
+Exec=/usr/bin/env python3 -c "import pathlib,sys,urllib.parse,subprocess; u=urllib.parse.urlparse(sys.argv[1]); p=pathlib.Path(urllib.parse.unquote(u.path) if u.scheme=='file' else sys.argv[1]).resolve(); sys.exit(subprocess.call(['bash',str(p.parent/'INSTALL-TO-STEAM.sh')]))" %k
+Terminal=true
+Icon=steam
+Categories=Game;

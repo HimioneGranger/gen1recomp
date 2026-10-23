@@ -1,0 +1,12 @@
+{
+  "repository": "https://gitlab.steamos.cloud/devkit/steamos-devkit",
+  "commit": "a00ceb7d91ea44a0c3e714a91a06417d6e5cdb33",
+  "files": {
+    "steam-client-create-shortcut": "8e1e5efa0645192040289c8249369f1d2d8d09f3cc60fa0282443eb765af2308",
+    "steam-devkit-rpc": "b9f342d1c5454c46064b039f43e99b82f7cdacf1231022efde836734c5672dcd",
+    "devkit_utils/__init__.py": "572f08d35dbd3f6f1fad6b4743c2b131c0850f30a5c12f3477c985155f0df980",
+    "LICENSE": "d3f16e42bebb5bdc052f15cc680da53fa4142b9e1ba5facd7924dcf021a8161f"
+  },
+  "runtime_alias": "SteamLinuxRuntime_4-arm64",
+  "runtime_alias_source": "client/devkit_client/__init__.py RUNTIME_ALIASES[RuntimeOptions.SLR4_arm64]"
+}

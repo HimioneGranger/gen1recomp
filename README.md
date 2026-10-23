@@ -112,7 +112,8 @@ SHA-1 before creating any game data. FireRed, LeafGreen, Ruby, Sapphire, and Eme
 **Platform notes:** [Linux](docs/platforms/linux.md),
 [iOS](docs/platforms/ios.md), [Xbox Dev Mode](docs/platforms/xbox.md),
 [handhelds](docs/platforms/handhelds.md),
-[Nintendo Switch](docs/platforms/switch.md), and
+[Nintendo Switch](docs/platforms/switch.md),
+[Steam Frame (experimental contributor proposal)](docs/platforms/steamframe.md), and
 [PlayStation 4](docs/platforms/ps4.md) each have their own install steps.
 
 **Windows Defender:** it sometimes flags the Windows build with a generic
